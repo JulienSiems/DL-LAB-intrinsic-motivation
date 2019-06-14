@@ -5,10 +5,10 @@ import sys
 sys.path.append("../")
 
 import gym
-from agent.dqn_agent import DQNAgent
-from agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork
+from src.agent.dqn_agent import DQNAgent
+from src.agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork
 
-from utils import *
+from utils.utils import *
 import click
 import torch
 
@@ -23,6 +23,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     do_training == True => train agent
     """
     stats = EpisodeStats()
+    # Erase the n_step buffer
+    agent.nstep_buffer = []
 
     # Save history
     image_hist = []
@@ -69,6 +71,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         state = next_state
 
         if terminal or (step * (skip_frames + 1)) > max_timesteps or stats.episode_reward < -20:
+            if agent.multi_step:
+                agent.finish_nstep()
             break
         step += 1
 
@@ -149,10 +153,12 @@ def state_preprocessing(state, normalize=True):
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=True, type=click.BOOL)
 @click.option('-es', '--epsilon_schedule', default=True, type=click.BOOL)
+@click.option('-ms', '--multi_step', default=True, type=click.BOOL)
+@click.option('-mss', '--multi_step_size', default=3, type=click.INT)
 @click.option('-s', '--seed', default=0, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
-         max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, seed):
+         max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size, seed):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
@@ -181,8 +187,9 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
 
     agent = DQNAgent(Q=Q_net, Q_target=Q_target_net, num_actions=num_actions, gamma=gamma, batch_size=batch_size,
                      tau=tau, epsilon=epsilon, lr=learning_rate, capacity=capacity, number_replays=number_replays,
-                     loss_function=loss_function, soft_update=soft_update, algorithm=algorithm,
-                     non_uniform_sampling=non_uniform_sampling, epsilon_schedule=epsilon_schedule)
+                     loss_function=loss_function, soft_update=soft_update, algorithm=algorithm, multi_step=multi_step,
+                     multi_step_size=multi_step_size, non_uniform_sampling=non_uniform_sampling,
+                     epsilon_schedule=epsilon_schedule)
 
     train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
                  num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,

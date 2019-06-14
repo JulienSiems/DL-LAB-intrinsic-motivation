@@ -1,5 +1,5 @@
 import numpy as np
-from agent.replay_buffer import ReplayBuffer
+from src.agent.replay_buffer import ReplayBuffer
 import torch
 import random
 
@@ -13,9 +13,10 @@ def soft_update(target, source, tau):
 
 class DQNAgent:
 
-    def __init__(self, Q, Q_target, num_actions, capacity, non_uniform_sampling=False, gamma=0.95, batch_size=64,
-                 epsilon=0.1, tau=0.01, lr=1e-4, number_replays=10, loss_function='L1', soft_update=False,
-                 algorithm='DQN', epsilon_schedule=False, **kwargs):
+    def __init__(self, Q, Q_target, num_actions, capacity, multi_step=True, multi_step_size=3,
+                 non_uniform_sampling=False, gamma=0.95,
+                 batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, number_replays=10, loss_function='L1',
+                 soft_update=False, algorithm='DQN', epsilon_schedule=False, **kwargs):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -54,6 +55,9 @@ class DQNAgent:
         self.algorithm = algorithm
 
         self.epsilon_schedule = epsilon_schedule
+        self.n_step_buffer = []
+        self.n_steps = multi_step_size
+        self.multi_step = multi_step
 
         if loss_function == 'L1':
             self.loss_function = torch.nn.SmoothL1Loss()
@@ -62,13 +66,35 @@ class DQNAgent:
         else:
             raise ValueError('Loss function {} not implemented.'.format(loss_function))
 
+    # Adapated from https://github.com/qfettes/DeepRL-Tutorials/blob/master/02.NStep_DQN.ipynb
+    def append_to_replay(self, s, a, s_, r, t):
+        self.n_step_buffer.append((s, a, s_, r))
+
+        if (len(self.n_step_buffer) < self.n_steps):
+            return
+
+        R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(self.n_steps)])
+        state, action, _, _ = self.n_step_buffer.pop(0)
+
+        self.replay_buffer.add_transition(state, action, s_, R, t)
+
+    def finish_n_step(self):
+        while len(self.n_step_buffer) > 0:
+            R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(len(self.n_step_buffer))])
+            state, action, _, _ = self.n_step_buffer.pop(0)
+
+            self.memory.push((state, action, R, None))
+
     def train(self, state, action, next_state, reward, terminal):
         """
         This method stores a transition to the replay buffer and updates the Q networks.
         """
 
         # 1. add current transition to replay buffer
-        self.replay_buffer.add_transition(state, action, next_state, reward, terminal)
+        if self.multi_step:
+            self.append_to_replay(state, action, next_state, reward, terminal)
+        else:
+            self.replay_buffer.add_transition(state, action, next_state, reward, terminal)
 
         if self.batch_size > len(self.replay_buffer._data):
             return
@@ -98,7 +124,11 @@ class DQNAgent:
                 raise ValueError('Algorithm {} not implemented'.format(self.algorithm))
             # Detach from comp graph to avoid that gradients are propagated through the target network.
             next_state_values = next_state_values.detach()
-            td_target = torch.from_numpy(batch_rewards).to(device).float() + self.gamma * next_state_values
+            if self.multi_step:
+                td_target = torch.from_numpy(batch_rewards).to(device).float() + (
+                        self.gamma ** self.n_steps) * next_state_values
+            else:
+                td_target = torch.from_numpy(batch_rewards).to(device).float() + self.gamma * next_state_values
 
             #       2.2 update the Q network
             #              self.Q.update(...)

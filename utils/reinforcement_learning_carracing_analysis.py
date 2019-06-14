@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
-from analysis import *
+from utils.analysis import *
 
 sns.set_style('whitegrid')
 
