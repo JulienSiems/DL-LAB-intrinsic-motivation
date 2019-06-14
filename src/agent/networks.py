@@ -116,3 +116,72 @@ class DeepQNetwork(nn.Module):
             # m.weight.data.fill_(1)
             # nn.init.xavier_uniform(m.weight)
             # m.weight.data.normal_(0.0, 0.008)
+
+
+class Encoder(nn.Module):
+
+    def __init__(self, history_length):
+        super(Encoder, self).__init__()
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(history_length, 32, kernel_size=3, stride=2, padding=1),
+            nn.ELU()
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.ELU()
+        )
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.ELU()
+        )
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.ELU()
+        )
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = x.view(x.size(0), -1)
+        return x
+
+
+class InverseModel(nn.Module):
+    """
+    The inverse dynamics model (eq. 2) predicts the action taken between state s_t and s_t+1
+    """
+
+    def __init__(self, num_actions=4, input_dimension=288 * 2):
+        super(InverseModel, self).__init__()
+        self.hidden = nn.Sequential(
+            nn.Linear(input_dimension, 256, bias=True),
+            nn.ELU()
+        )
+        self.output = nn.Linear(256, num_actions, bias=True)
+
+    def forward(self, phi_s_t, phi_s_tp1):
+        feature_vector = torch.cat([phi_s_t, phi_s_tp1], dim=1)
+        x = self.hidden(feature_vector)
+        a_t_pred = self.output(x)
+        return a_t_pred
+
+
+class ForwardModel(nn.Module):
+    """
+    The forward dynamics model (eq. 4) predicts the embedding of the next state given the current state and the action taken.
+    """
+    def __init__(self, input_dimension=288 + 4, output_dimension=288):
+        super(ForwardModel, self).__init__()
+        self.hidden = nn.Sequential(
+            nn.Linear(input_dimension, 256, bias=True),
+            nn.ELU()
+        )
+        self.output = nn.Linear(256, output_dimension, bias=True)
+
+    def forward(self, phi_s_t, a_t):
+        feature_vector = torch.cat([phi_s_t, a_t], dim=1)
+        x = self.hidden(feature_vector)
+        phi_s_tp1_pred = self.output(x)
+        return phi_s_tp1_pred
