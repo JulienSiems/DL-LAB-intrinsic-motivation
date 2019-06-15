@@ -1,8 +1,9 @@
 import torch.nn as nn
-import torch.nn.functional as F
-
-from torchvision.models.resnet import ResNet, BasicBlock
 import torch
+import torch.nn.functional as F
+import torchvision.models as models
+import torch.utils.model_zoo as model_zoo
+from torchvision.models.resnet import ResNet, BasicBlock, model_urls
 
 """
 CartPole network
@@ -14,174 +15,59 @@ class MLP(nn.Module):
         super(MLP, self).__init__()
         self.fc1 = nn.Linear(state_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, action_dim)
+        self.fc_adv = nn.Linear(hidden_dim, action_dim)
+        self.fc_val = nn.Linear(hidden_dim, 1)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
-
-
-# https://zablo.net/blog/post/using-resnet-for-mnist-in-pytorch-tutorial/
-class ResnetVariant(ResNet):
-    def __init__(self, history_length, num_actions):
-        super(ResnetVariant, self).__init__(BasicBlock, [2, 2, 2, 2], num_classes=num_actions)
-        self.conv1 = nn.Conv2d(history_length, 64,
-                               kernel_size=(7, 7),
-                               stride=(2, 2),
-                               padding=(3, 3), bias=False)
-
-    def forward(self, x):
-        return torch.softmax(
-            super(ResnetVariant, self).forward(x), dim=-1)
-
-
-class LeNetVariant(nn.Module):
-    """
-    Adapted from LENET https://github.com/kuangliu/pytorch-cifar/blob/master/models/lenet.py
-    """
-
-    def __init__(self, history_length, num_actions):
-        super(LeNetVariant, self).__init__()
-        self.conv1 = nn.Conv2d(history_length, 6, 5)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(7056, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, num_actions)
-
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-
-    def forward(self, x):
-        out = F.elu(self.conv1(x))
-        out = F.max_pool2d(out, 2)
-        out = F.elu(self.conv2(out))
-        out = F.max_pool2d(out, 2)
-        out = out.view(out.size(0), -1)
-        out = F.elu(self.fc1(out))
-        out = F.elu(self.fc2(out))
-        out = F.softmax(self.fc3(out), dim=1)
-        return out
-
-
-# https://github.com/diegoalejogm/deep-q-learning/blob/master/utils/net.py
-class DeepQNetwork(nn.Module):
-
-    def __init__(self, num_actions, history_length):
-        super(DeepQNetwork, self).__init__()
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(history_length, 32, kernel_size=8, stride=4),
-            nn.ReLU()
-        )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
-            nn.ReLU()
-        )
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
-            nn.ReLU()
-        )
-        self.hidden = nn.Sequential(
-            nn.Linear(4096, 512, bias=True),
-            nn.ReLU()
-        )
-        self.out = nn.Sequential(
-            nn.Linear(512, num_actions, bias=True)
-        )
-        # Init with cuda if available
-        if torch.cuda.is_available():
-            self.cuda()
-        self.apply(self.weights_init)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = x.view(x.size(0), -1)
-        x = self.hidden(x)
-        x = self.out(x)
+        xf = F.relu(self.fc2(x))
+        # val = self.fc_val(xf)
+        adv = self.fc_adv(xf)
+        # x = val + adv - adv.mean()
+        x = adv
         return x
 
-    @staticmethod
-    def weights_init(m):
-        classname = m.__class__.__name__
-        if classname.find('Conv') != -1:
-            # pass
-            m.weight.data.normal_(0.0, 0.02)
-            # nn.init.xavier_uniform(m.weight)
-        if classname.find('Linear') != -1:
-            pass
-            # m.weight.data.normal_(0.0, 0.02)
-            # m.weight.data.fill_(1)
-            # nn.init.xavier_uniform(m.weight)
-            # m.weight.data.normal_(0.0, 0.008)
+    def init_zero(self):
+        for param in self.parameters():
+            param.data.copy_(0.0 * param.data)
 
 
-class Encoder(nn.Module):
-
-    def __init__(self, history_length):
-        super(Encoder, self).__init__()
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(history_length, 32, kernel_size=3, stride=2, padding=1),
-            nn.ELU()
+class CNN(nn.Module):
+    def __init__(self, history_length=1, n_classes=5):
+        super(CNN, self).__init__()
+        # define layers of a convolutional neural network
+        self.relu = nn.ReLU(inplace=True)
+        self.conv_net = nn.Sequential(
+            nn.Conv2d(history_length, 16, kernel_size=8, stride=4, padding=0, bias=False),
+            self.relu,
+            nn.Conv2d(16, 32, kernel_size=4, stride=2, padding=0, bias=False),
+            self.relu,
         )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.ELU()
+        self.fc_net = nn.Sequential(
+            nn.Linear(3200, 256),
+            self.relu,
         )
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.ELU()
+        self.fc_adv_net = nn.Sequential(
+            nn.Linear(256, n_classes)
         )
-        self.conv4 = nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.ELU()
+        self.fc_val_net = nn.Sequential(
+            nn.Linear(256, 1),
         )
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
+        # compute forward pass
+        x = self.conv_net(x)
         x = x.view(x.size(0), -1)
+        xf = self.fc_net(x)
+        val = self.fc_val_net(xf)
+        adv = self.fc_adv_net(xf)
+        x = val + adv - adv.mean()
+
         return x
 
-
-class InverseModel(nn.Module):
-    """
-    The inverse dynamics model (eq. 2) predicts the action taken between state s_t and s_t+1
-    """
-
-    def __init__(self, num_actions=4, input_dimension=288 * 2):
-        super(InverseModel, self).__init__()
-        self.hidden = nn.Sequential(
-            nn.Linear(input_dimension, 256, bias=True),
-            nn.ELU()
-        )
-        self.output = nn.Linear(256, num_actions, bias=True)
-
-    def forward(self, phi_s_t, phi_s_tp1):
-        feature_vector = torch.cat([phi_s_t, phi_s_tp1], dim=1)
-        x = self.hidden(feature_vector)
-        a_t_pred = self.output(x)
-        return a_t_pred
+    def init_zero(self):
+        for param in self.parameters():
+            param.data.copy_(0.0 * param.data)
 
 
-class ForwardModel(nn.Module):
-    """
-    The forward dynamics model (eq. 4) predicts the embedding of the next state given the current state and the action taken.
-    """
-    def __init__(self, input_dimension=288 + 4, output_dimension=288):
-        super(ForwardModel, self).__init__()
-        self.hidden = nn.Sequential(
-            nn.Linear(input_dimension, 256, bias=True),
-            nn.ELU()
-        )
-        self.output = nn.Linear(256, output_dimension, bias=True)
 
-    def forward(self, phi_s_t, a_t):
-        feature_vector = torch.cat([phi_s_t, a_t], dim=1)
-        x = self.hidden(feature_vector)
-        phi_s_tp1_pred = self.output(x)
-        return phi_s_tp1_pred

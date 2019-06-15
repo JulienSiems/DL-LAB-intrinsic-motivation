@@ -4,28 +4,32 @@ import sys
 
 sys.path.append("../")
 
-import gym
-from src.agent.dqn_agent import DQNAgent
-from src.agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork
-
-from utils.utils import *
-import click
 import torch
+import numpy as np
+import gym
+from agent.dqn_agent import DQNAgent
+from agent.networks import CNN
+import itertools as it
+from utils.utils import *
+from tensorboardX import SummaryWriter
+from gym import wrappers
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+import os
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
-def run_episode(env, agent, deterministic, history_length, skip_frames, max_timesteps, normalize_images,
-                do_training=True, rendering=False, soft_update=False):
+def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rendering=False, max_timesteps=1000,
+                history_length=1):
     """
     This methods runs one episode for a gym environment. 
     deterministic == True => agent executes only greedy actions according the Q function approximator (no random actions).
     do_training == True => train agent
     """
+
     stats = EpisodeStats()
 
     # Save history
-    image_hist = []
+    history_buffer = []
 
     step = 0
     state = env.reset()
@@ -34,15 +38,17 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     env.viewer.window.dispatch_events()
 
     # append image history to first state
-    state = state_preprocessing(state, normalize=normalize_images)
-    image_hist.extend([state] * (history_length + 1))
-    state = np.array(image_hist).reshape(history_length + 1, 96, 96)
-    # state = state.reshape(3, 96, 96) / 255.0
+    n_state = state_preprocessing(state)
+    history_buffer.extend([n_state] * history_length)
+    h_state = np.array(history_buffer)
+    state = np.expand_dims(np.squeeze(np.squeeze(h_state, axis=2), axis=1), axis=0)
+
+    loss = 0
     while True:
         # get action_id from agent
         # Hint: adapt the probabilities of the 5 actions for random sampling so that the agent explores properly.
         action_id = agent.act(state=state, deterministic=deterministic)
-        action = id_to_action(action_id)
+        action = id_to_action(action_id, max_speed=0.8)
 
         # Hint: frame skipping might help you to get better results.
         reward = 0
@@ -57,147 +63,157 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
                 break
 
         next_state = state_preprocessing(next_state)
-        image_hist.append(next_state)
-        image_hist.pop(0)
-        next_state = np.array(image_hist).reshape(history_length + 1, 96, 96)
+        history_buffer.pop()
+        history_buffer.insert(0, next_state)
+        h_state = np.array(history_buffer)
+        next_state = np.expand_dims(np.squeeze(np.squeeze(h_state, axis=2), axis=1), axis=0)
 
         if do_training:
-            agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
-                                   terminal=terminal)
-            agent.train()
+            if (step * (skip_frames + 1)) > max_timesteps:
+                terminal = True
+            loss = agent.train(state, action_id, next_state, reward, terminal)
 
-        stats.step(reward, action_id)
+        stats.step(reward, action_id, loss)
 
         state = next_state
 
-        if terminal or (step * (skip_frames + 1)) > max_timesteps or stats.episode_reward < -20:
-            if agent.multi_step:
-                # Finish n step buffer
-                agent.finish_n_step()
+        if terminal or (step * (skip_frames + 1)) > max_timesteps:
             break
+
         step += 1
-
-    print('epsilon_threshold', agent.eps_threshold)
-
-    # Update the target network
-    if not soft_update:
-        agent.Q_target.load_state_dict(agent.Q.state_dict())
 
     return stats
 
 
-def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
-                 history_length, rendering, max_timesteps, normalize_images):
+def train_online(env, agent, num_episodes, history_length=1, skip_frames=0, model_dir="./models_carracing",
+                 tensorboard_dir="./tensorboard"):
+    if not os.path.exists(model_dir):
+        os.mkdir(model_dir)
+
     print("... train agent")
+    tensorboard = SummaryWriter(log_dir=os.path.join(tensorboard_dir, "train"),
+                                filename_suffix="-Carracing_dqn_hist{}_b{}_vc{}.pt".format(
+                                    history_length, agent.batch_size, eval_cycle))
 
-    for i in range(num_episodes):
-        print("episode %d" % i)
-        max_timesteps_current = max_timesteps
-        stats = run_episode(env, agent, max_timesteps=max_timesteps_current, deterministic=False, do_training=True,
-                            rendering=rendering, soft_update=soft_update, skip_frames=skip_frames,
-                            history_length=history_length, normalize_images=normalize_images)
+    try:
+        checkpoint_data = agent.load(os.path.join(model_dir, "dqn_agent_hist{}_b{}_vc{}.pt".format(history_length,
+                                                                                                     agent.batch_size,
+                                                                                                     eval_cycle)))
+        for id, i in enumerate(checkpoint_data['epoch']):
+            tensorboard.add_scalar("Train/Episode Reward", checkpoint_data['tr_reward'][id], i)
+            tensorboard.add_scalar("Train/straight", checkpoint_data['tr_a_straight'][id], i)
+            tensorboard.add_scalar("Train/left", checkpoint_data['tr_a_left'][id], i)
+            tensorboard.add_scalar("Train/right", checkpoint_data['tr_a_right'][id], i)
+            tensorboard.add_scalar("Train/accel", checkpoint_data['tr_a_accel'][id], i)
+            tensorboard.add_scalar("Train/brake", checkpoint_data['tr_a_brake'][id], i)
+        epoch_start = id + 1
+        max_reward = checkpoint_data['max_eval_reward']
+        for id, i in enumerate(checkpoint_data['eval_epoch']):
+            tensorboard.add_scalar("Evaluation/Mean Eval Reward", checkpoint_data['eval_reward'][id], i)
 
-        writer.add_scalar('train_episode_reward', stats.episode_reward, global_step=i)
-        writer.add_scalar('train_straight', stats.get_action_usage(STRAIGHT), global_step=i)
-        writer.add_scalar('train_left', stats.get_action_usage(LEFT), global_step=i)
-        writer.add_scalar('train_right', stats.get_action_usage(RIGHT), global_step=i)
-        writer.add_scalar('train_accel', stats.get_action_usage(ACCELERATE), global_step=i)
-        writer.add_scalar('train_brake', stats.get_action_usage(BRAKE), global_step=i)
+        print("=> loading checkpoint success".format(model_dir))
+    except:
+        print("=> loading checkpoint failed".format(model_dir))
+        checkpoint_data = {'epoch': [], 'tr_reward': [], 'tr_a_straight': [], 'tr_a_left': [], 'tr_a_right': [],
+                           'tr_a_accel': [], 'tr_a_brake': [],
+                           'eval_epoch': [], 'eval_reward': [], 'Qnet': 0, 'Qtargetnet': 0, 'optimizer': 0,
+                           'max_eval_reward': 0, 'Qnet_final': 0, 'Qtargetnet_final': 0, 'optimizer_final': 0}
+        epoch_start = 0
+        max_reward = -20000
 
-        # EVALUATION
+    agent.set_eval_mode()
+    for i in range(epoch_start, num_episodes):
+        # Hint: you can keep the episodes short in the beginning by changing max_timesteps (otherwise the car will spend most of the time out of the track)
+
+        max_timesteps = int(min(pow(i / (num_episodes - 100), 1.5) * 1000 + 200, 1000))
+        stats = run_episode(env, agent, max_timesteps=max_timesteps, deterministic=False, do_training=True,
+                            rendering=True, history_length=history_length, skip_frames=skip_frames)
+        agent.epsilon_max = max(agent.epsilon_final, agent.epsilon_start - i / (num_episodes / 10))
+        agent.epsilon = agent.epsilon_max
+
+        tensorboard.add_scalar("Train/Episode Reward", stats.episode_reward, i + 1)
+        tensorboard.add_scalar("Train/straight", stats.get_action_usage(STRAIGHT), i + 1)
+        tensorboard.add_scalar("Train/left", stats.get_action_usage(LEFT), i + 1)
+        tensorboard.add_scalar("Train/right", stats.get_action_usage(RIGHT), i + 1)
+        tensorboard.add_scalar("Train/accel", stats.get_action_usage(ACCELERATE), i + 1)
+        tensorboard.add_scalar("Train/brake", stats.get_action_usage(BRAKE), i + 1)
+
+        checkpoint_data['epoch'].append(i + 1)
+        checkpoint_data['tr_reward'].append(stats.episode_reward)
+        checkpoint_data['tr_a_straight'].append(stats.get_action_usage(STRAIGHT))
+        checkpoint_data['tr_a_left'].append(stats.get_action_usage(LEFT))
+        checkpoint_data['tr_a_right'].append(stats.get_action_usage(RIGHT))
+        checkpoint_data['tr_a_accel'].append(stats.get_action_usage(ACCELERATE))
+        checkpoint_data['tr_a_brake'].append(stats.get_action_usage(BRAKE))
+
+        print("Episode: {} Epsilon: {}	Timesteps: {}	Reward: {}".format(i, agent.epsilon, max_timesteps,
+                                                                              stats.episode_reward))
+
+        # evaluate your agent every 'eval_cycle' episodes using run_episode(env, agent, deterministic=True, do_training=False) to
         # check its performance with greedy actions only. You can also use tensorboard to plot the mean episode reward.
         if i % eval_cycle == 0:
-            stats = []
+            eval_rewards = []
             for j in range(num_eval_episodes):
-                stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=1000,
-                                         history_length=history_length, skip_frames=skip_frames,
-                                         normalize_images=normalize_images))
-            stats_agg = [stat.episode_reward for stat in stats]
-            episode_reward_mean, episode_reward_std = np.mean(stats_agg), np.std(stats_agg)
-            print('Validation {} +- {}'.format(episode_reward_mean, episode_reward_std))
-            print('Replay buffer length', len(agent.replay_buffer._data))
-            writer.add_scalar('val_episode_reward_mean', episode_reward_mean, global_step=i)
-            writer.add_scalar('val_episode_reward_std', episode_reward_std, global_step=i)
+                stats = run_episode(env, agent, deterministic=True, do_training=False, rendering=True,
+                                    history_length=history_length, max_timesteps=val_max_time_step)
+                eval_rewards.append(stats.episode_reward)
+            mean_reward = sum(eval_rewards) / num_eval_episodes
+            tensorboard.add_scalar("Evaluation/Mean Eval Reward", mean_reward, i + 1)
+            checkpoint_data['eval_epoch'].append(i + 1)
+            checkpoint_data['eval_reward'].append(mean_reward)
+            print("Mean Eval Rewards: {}".format(mean_reward))
+            print("Mean Eval Rewards: {}    Max Reward: {}".format(mean_reward, max_reward))
 
-        # store model.
-        if i % eval_cycle == 0 or i >= (num_episodes - 1):
-            model_dir = agent.save(os.path.join(writer.logdir, "agent.pt"))
-            print("Model saved in file: %s" % model_dir)
+            if max_reward <= mean_reward:
+                max_reward = mean_reward
+                checkpoint_data['Qnet'] = agent.Q.state_dict()
+                checkpoint_data['Qtargetnet'] = agent.Q_target.state_dict()
+                checkpoint_data['optimizer'] = agent.optimizer.state_dict()
+                checkpoint_data['max_eval_reward'] = max_reward
+            checkpoint_data['Qnet_final'] = agent.Q.state_dict()
+            checkpoint_data['Qtargetnet_final'] = agent.Q_target.state_dict()
+            checkpoint_data['optimizer_final'] = agent.optimizer.state_dict()
+            agent.save(checkpoint_data, os.path.join(model_dir, "dqn_agent_hist{}_b{}_vc{}.pt".format(
+                history_length, agent.batch_size, eval_cycle)))
+
+    tensorboard.close()
 
 
-def state_preprocessing(state, normalize=True):
-    bw = rgb2gray(state).reshape(96, 96)
-    if normalize:
-        bw = bw / 255.0
-    return bw
-
-
-@click.command()
-@click.option('-ne', '--num_episodes', default=1000, type=click.INT, help='train for ... episodes')
-@click.option('-ec', '--eval_cycle', default=50, type=click.INT, help='evaluate every ... episodes')
-@click.option('-ne', '--num_eval_episodes', default=1, type=click.INT, help='evaluate this many epochs')
-@click.option('-K', '--number_replays', default=1, type=click.INT)
-@click.option('-bs', '--batch_size', default=32, type=click.INT)
-@click.option('-lr', '--learning_rate', default=1e-4, type=click.FLOAT)
-@click.option('-ca', '--capacity', default=10000, type=click.INT)
-@click.option('-g', '--gamma', default=0.95, type=click.FLOAT)
-@click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
-@click.option('-t', '--tau', default=0.01, type=click.FLOAT)
-@click.option('-su', '--soft_update', default=False, type=click.BOOL)
-@click.option('-hl', '--history_length', default=4, type=click.INT)
-@click.option('-sf', '--skip_frames', default=3, type=click.INT)
-@click.option('-lf', '--loss_function', default='L1', type=click.Choice(['L1', 'L2']))
-@click.option('-al', '--algorithm', default='DDQN', type=click.Choice(['DQN', 'DDQN']))
-@click.option('-mo', '--model', default='DeepQNetwork', type=click.Choice(['Resnet', 'Lenet', 'DeepQNetwork']))
-@click.option('-su', '--render_training', default=False, type=click.BOOL)
-@click.option('-mt', '--max_timesteps', default=1000, type=click.INT)
-@click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
-@click.option('-nu', '--non_uniform_sampling', default=True, type=click.BOOL)
-@click.option('-es', '--epsilon_schedule', default=True, type=click.BOOL)
-@click.option('-ms', '--multi_step', default=True, type=click.BOOL)
-@click.option('-mss', '--multi_step_size', default=3, type=click.INT)
-@click.option('-s', '--seed', default=0, type=click.INT)
-def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
-         epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
-         max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size, seed):
-    # Set seed
-    torch.manual_seed(seed)
-    # Create experiment directory with run configuration
-    writer = setup_experiment_folder_writer(inspect.currentframe(), name='car', log_dir='carracing_report_2',
-                                            args_for_filename=['algorithm', 'loss_function', 'num_episodes',
-                                                               'number_replays'])
-
-    # launch stuff inside
-    # virtual display here
-    env = gym.make('CarRacing-v0').unwrapped
-
-    num_actions = 5
-
-    # Define Q network, target network and DQN agent
-    if model == 'Resnet':
-        CNN = ResnetVariant
-    elif model == 'Lenet':
-        CNN = LeNetVariant
-    elif model == 'DeepQNetwork':
-        CNN = DeepQNetwork
-    else:
-        raise ValueError('{} not implemented'.format(model))
-
-    Q_net = CNN(num_actions=num_actions, history_length=history_length + 1).to(device)
-    Q_target_net = CNN(num_actions=num_actions, history_length=history_length + 1).to(device)
-
-    agent = DQNAgent(Q=Q_net, Q_target=Q_target_net, num_actions=num_actions, gamma=gamma, batch_size=batch_size,
-                     tau=tau, epsilon=epsilon, lr=learning_rate, capacity=capacity, number_replays=number_replays,
-                     loss_function=loss_function, soft_update=soft_update, algorithm=algorithm, multi_step=multi_step,
-                     multi_step_size=multi_step_size, non_uniform_sampling=non_uniform_sampling,
-                     epsilon_schedule=epsilon_schedule)
-
-    train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
-                 num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,
-                 history_length=history_length, rendering=render_training, max_timesteps=max_timesteps,
-                 normalize_images=normalize_images)
-    writer.close()
+def state_preprocessing(state):
+    return np.expand_dims(rgb2gray(np.expand_dims(state, axis=0)), axis=1)
 
 
 if __name__ == "__main__":
-    main()
+
+    env = gym.make('CarRacing-v0').unwrapped
+
+    history_length = 2
+    skip_frames = 3
+    state_dim = (history_length, 96, 96)
+    num_actions = 5
+    action_distribution = [0.3, 0.15, 0.15, 0.35, 0.05]
+    replay_buffer_size = 3e4
+
+    if torch.cuda.is_available():
+        batch_size = 32
+        num_episodes = 2005
+        num_eval_episodes = 5
+        eval_cycle = 50
+        val_max_time_step = 1000
+    else:
+        batch_size = 16
+        num_episodes = 1005
+        num_eval_episodes = 5
+        eval_cycle = 50
+        val_max_time_step = 1000
+
+    # Define Q network, target network and DQN agent
+    qnet = CNN(history_length=history_length, n_classes=num_actions)
+    qtarget = CNN(history_length=history_length, n_classes=num_actions)
+    agent = DQNAgent(Q=qnet, Q_target=qtarget, num_actions=num_actions, gamma=0.95, batch_size=batch_size, epsilon=0.1,
+                     tau=0.001, lr=2e-4, state_dim=state_dim, act_dist=action_distribution, do_training=True,
+                     replay_buffer_size=replay_buffer_size)
+
+    train_online(env, agent, num_episodes=num_episodes, history_length=history_length, skip_frames=skip_frames,
+                 model_dir="./models_carracing")
+

@@ -1,11 +1,9 @@
-import random
-
-import numpy as np
+import tensorflow as tf
 import torch
-
-from src.agent.replay_buffer import ReplayBuffer
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+import numpy as np
+from agent.replay_buffer import ReplayBuffer
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 
 
 def soft_update(target, source, tau):
@@ -15,10 +13,7 @@ def soft_update(target, source, tau):
 
 class DQNAgent:
 
-    def __init__(self, Q, Q_target, num_actions, capacity, multi_step=True, multi_step_size=3,
-                 non_uniform_sampling=False, gamma=0.95,
-                 batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, number_replays=10, loss_function='L1',
-                 soft_update=False, algorithm='DQN', epsilon_schedule=False, **kwargs):
+    def __init__(self, Q, Q_target, num_actions, gamma=0.95, batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, state_dim=0, act_dist=None, do_training=False, replay_buffer_size=10000):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -34,126 +29,89 @@ class DQNAgent:
             lr: learning rate of the optimizer
         """
         # setup networks
-        self.Q = Q
-        self.Q_target = Q_target
-        self.Q_target.load_state_dict(self.Q.state_dict())
+        if torch.cuda.is_available():
+            device_name = 'cuda'
+        else:
+            device_name = 'cpu'
+        self.device = torch.device(device_name)
 
-        # define replay buffer
-        self.replay_buffer = ReplayBuffer(capacity=capacity)
+        self.Q = Q.to(self.device)
+        self.Q_target = Q_target.to(self.device)
 
+        self.Q_target.init_zero()
+        # self.Q_target.load_state_dict(self.Q.state_dict())
+
+        if do_training:
+            # define replay buffer
+            self.replay_buffer = ReplayBuffer(state_dim=state_dim, buffer_size=replay_buffer_size)
+        
         # parameters
         self.batch_size = batch_size
         self.gamma = gamma
         self.tau = tau
+
+        self.epsilon_decay_end = 5 * 10 ** 3
+        self.epsilon_start = 0.9
+        self.epsilon_final = 0.05
+        self.epsilon_max = 1.0
+
         self.epsilon = epsilon
 
-        self.number_replays = number_replays
+        self.loss_function = torch.nn.MSELoss()
         self.optimizer = torch.optim.Adam(self.Q.parameters(), lr=lr)
+
         self.num_actions = num_actions
-        self.steps_done = 0
-        self.soft_update = soft_update
-        self.non_uniform_sampling = non_uniform_sampling
 
-        self.algorithm = algorithm
-
-        self.epsilon_schedule = epsilon_schedule
-        self.n_step_buffer = []
-        self.n_steps = multi_step_size
-        self.multi_step = multi_step
-
-        if loss_function == 'L1':
-            self.loss_function = torch.nn.SmoothL1Loss()
-        elif loss_function == 'L2':
-            self.loss_function = torch.nn.MSELoss()
+        if act_dist is not None:
+            self.action_probs = act_dist
         else:
-            raise ValueError('Loss function {} not implemented.'.format(loss_function))
+            self.action_probs = [1 / self.num_actions] * self.num_actions
 
-    # Adapated from https://github.com/qfettes/DeepRL-Tutorials/blob/master/02.NStep_DQN.ipynb
-    def append_to_replay(self, state, action, next_state, reward, terminal):
-        if self.multi_step:
-            self.n_step_buffer.append((state, action, next_state, reward))
+        self.Q_target.eval()
 
-            if len(self.n_step_buffer) < self.n_steps:
-                return
-
-            R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(self.n_steps)])
-            state, action, _, _ = self.n_step_buffer.pop(0)
-
-            self.replay_buffer.add_transition(state, action, next_state, R, terminal)
-        else:
-            self.replay_buffer.add_transition(state, action, next_state, reward, terminal)
-
-    def finish_n_step(self):
-        if self.multi_step:
-            while len(self.n_step_buffer) > 0:
-                R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(len(self.n_step_buffer))])
-                state, action, next_state, _ = self.n_step_buffer.pop(0)
-
-                self.replay_buffer.add_transition(state, action, next_state, R, True)
-
-    def train(self):
+    def train(self, state, action, next_state, reward, terminal):
         """
         This method stores a transition to the replay buffer and updates the Q networks.
         """
-        if self.batch_size > len(self.replay_buffer._data):
-            return
 
-        for iter in range(self.number_replays):
-            # 2. sample next batch and perform batch update: (initially take less than batch_size because of the replay
-            # buffer
-            batch_states, batch_actions, batch_next_states, batch_rewards, batch_dones = \
-                self.replay_buffer.next_batch(batch_size=self.batch_size)
-
-            # Set the expected value of a terminated section to zero.
-            non_final_mask = torch.from_numpy(np.array(batch_dones != True, dtype=np.uint8))
-            non_final_next_states = torch.from_numpy(batch_next_states)[non_final_mask].to(device).float()
-
-            #       2.1 compute td targets and loss
-            #              td_target =  reward + discount * max_a Q_target(next_state_batch, a)
-            next_state_values = torch.zeros(self.batch_size, device=device)
-            if 'DQN' == self.algorithm:
-                next_state_values[non_final_mask] = torch.max(self.Q_target(non_final_next_states), dim=1)[0]
-            elif 'DDQN' == self.algorithm:
-                # Double DQN
-                # Adapted from https://github.com/Shivanshu-Gupta/Pytorch-Double-DQN/blob/master/agent.py
-                next_state_actions = self.Q(non_final_next_states).max(dim=1)[1]
-                next_state_values[non_final_mask] = \
-                    self.Q_target(non_final_next_states).gather(dim=1, index=next_state_actions.view(-1, 1)).squeeze(1)
-            else:
-                raise ValueError('Algorithm {} not implemented'.format(self.algorithm))
-            # Detach from comp graph to avoid that gradients are propagated through the target network.
-            next_state_values = next_state_values.detach()
-            if self.multi_step:
-                td_target = torch.from_numpy(batch_rewards).to(device).float() + (
-                        self.gamma ** self.n_steps) * next_state_values
-            else:
-                td_target = torch.from_numpy(batch_rewards).to(device).float() + self.gamma * next_state_values
-
-            #       2.2 update the Q network
-            #              self.Q.update(...)
-            state_action_values = self.Q(torch.from_numpy(batch_states).to(device).float())
-            batch_actions_tensor = torch.from_numpy(batch_actions).to(device).view(-1, 1)
-            # Choose the action previously taken
-            q_pick = torch.gather(state_action_values, dim=1, index=batch_actions_tensor)
-            # Chosen like in this tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
-            self.optimizer.zero_grad()
-
-            loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
-            loss.backward()
-            for param in self.Q.parameters():
-                param.grad.data.clamp_(-1, 1)
-            self.optimizer.step()
-
+        # 1. add current transition to replay buffer
+        # 2. sample next batch and perform batch update: 
+        #       2.1 compute td targets and loss 
+        #              td_target =  reward + discount * max_a Q_target(next_state_batch, a)
+        #       2.2 update the Q network
+        #              self.Q.update(...)
         #       2.3 call soft update for target network
-        if self.soft_update:
-            soft_update(self.Q_target, self.Q, self.tau)
-            '''
-            Q_target_update = {}
-            for key in self.Q_target.state_dict().keys():
-                Q_target_update[key] = (1 - self.tau) * self.Q_target.state_dict()[key] \
-                                       + self.tau * self.Q.state_dict()[key]
-            self.Q_target.load_state_dict(Q_target_update)
-            '''
+        #              self.Q_target.update(...)
+
+        self.replay_buffer.add_transition(state, action, next_state, reward, terminal)
+
+        batch_states, batch_actions, batch_next_states, batch_rewards, batch_dones = self.replay_buffer.next_batch(self.batch_size)
+        batch_states = torch.from_numpy(batch_states).float().to(self.device)
+        batch_actions = torch.from_numpy(batch_actions).long().to(self.device)
+        batch_next_states = torch.from_numpy(batch_next_states).float().to(self.device)
+        batch_rewards = torch.from_numpy(batch_rewards).float().to(self.device)
+        batch_dones = torch.from_numpy(batch_dones.astype(int)).byte().to(self.device)
+
+        self.set_train_mode()
+        self.optimizer.zero_grad()
+        _, target_actions = self.Q(batch_next_states).max(dim=1)
+        q_target_values = self.Q_target(batch_next_states)
+        target_action_values = q_target_values.gather(dim=1, index=target_actions.unsqueeze(-1)).squeeze(-1)
+        target_action_values[batch_dones] = 0.0
+        td_target = batch_rewards + self.gamma * target_action_values
+        q_values = self.Q(batch_states)
+        action_values = q_values.gather(dim=1, index=batch_actions.unsqueeze(-1)).squeeze(-1)
+
+        loss = self.loss_function(action_values, td_target.detach())
+        loss.backward()
+        self.optimizer.step()
+
+        soft_update(self.Q_target, self.Q, self.tau)
+
+        self.set_eval_mode()
+
+        return loss
+
 
     def act(self, state, deterministic):
         """
@@ -164,39 +122,45 @@ class DQNAgent:
         Returns:
             action id
         """
-        sample = random.random()
-
-        if self.epsilon_schedule:
-            # Like in pytorch tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
-            EPS_START = 0.9
-            EPS_END = 0.05
-            EPS_DECAY = 10000
-            eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-                            np.exp(-1. * self.steps_done / EPS_DECAY)
-            self.steps_done += 1
-        else:
-            eps_threshold = self.epsilon
-        self.eps_threshold = eps_threshold
         r = np.random.uniform()
-        if deterministic or sample > eps_threshold:
-            with torch.no_grad():
-                # take greedy action (argmax)
-                action_soft = self.Q(torch.from_numpy(np.expand_dims(state, 0)).to(device).float())
-                action_id = torch.argmax(action_soft).detach().cpu().numpy()
+        if deterministic or r > self.epsilon:
+            # take greedy action (argmax)
+            state = torch.from_numpy(state).float().to(self.device)
+            _, action_id = self.Q(state).view(1, -1).max(dim=1)
+            action_id = action_id.item()
         else:
-            if self.non_uniform_sampling:
-                action_id = np.random.choice(self.num_actions, 1, p=[0.45, 0.15, 0.15, 0.15, 0.1])[0]
-            else:
-                action_id = np.random.randint(self.num_actions)
-            # TODO: sample random action
+
+            # sample random action
             # Hint for the exploration in CarRacing: sampling the action from a uniform distribution will probably not work. 
             # You can sample the agents actions with different probabilities (need to sum up to 1) so that the agent will prefer to accelerate or going straight.
             # To see how the agent explores, turn the rendering in the training on and look what the agent is doing.
+            action_id = np.random.choice(self.num_actions, p=self.action_probs)
+          
         return action_id
 
-    def save(self, file_name):
-        torch.save(self.Q.state_dict(), file_name)
+    def save(self, data, file_name):
+        torch.save(data, file_name)
 
     def load(self, file_name):
-        self.Q.load_state_dict(torch.load(file_name, map_location='cpu'))
-        self.Q_target.load_state_dict(torch.load(file_name, map_location='cpu'))
+        print("=> loading checkpoint '{}'".format(file_name))
+        checkpoint_data = torch.load(file_name, map_location=self.device)
+        self.Q.load_state_dict(checkpoint_data['Qnet_final'])
+        self.Q_target.load_state_dict(checkpoint_data['Qtargetnet_final'])
+        self.optimizer.load_state_dict(checkpoint_data['optimizer_final'])
+        return checkpoint_data
+
+    def load_best_configuration(self, file_name):
+        print("=> loading checkpoint '{}'".format(file_name))
+        checkpoint_data = torch.load(file_name, map_location=self.device)
+        self.Q.load_state_dict(checkpoint_data['Qnet'])
+        self.Q_target.load_state_dict(checkpoint_data['Qtargetnet'])
+        self.optimizer.load_state_dict(checkpoint_data['optimizer'])
+        return checkpoint_data
+
+    def set_train_mode(self):
+        self.Q.train()
+
+    def set_eval_mode(self):
+        self.Q.eval()
+
+
