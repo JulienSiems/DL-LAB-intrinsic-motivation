@@ -23,8 +23,6 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     do_training == True => train agent
     """
     stats = EpisodeStats()
-    # Erase the n_step buffer
-    agent.nstep_buffer = []
 
     # Save history
     image_hist = []
@@ -64,7 +62,9 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         next_state = np.array(image_hist).reshape(history_length + 1, 96, 96)
 
         if do_training:
-            agent.train(state, action_id, next_state, reward, terminal)
+            agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
+                                   terminal=terminal)
+            agent.train()
 
         stats.step(reward, action_id)
 
@@ -72,7 +72,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
         if terminal or (step * (skip_frames + 1)) > max_timesteps or stats.episode_reward < -20:
             if agent.multi_step:
-                agent.finish_nstep()
+                # Finish n step buffer
+                agent.finish_n_step()
             break
         step += 1
 

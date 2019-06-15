@@ -1,7 +1,9 @@
-import numpy as np
-from src.agent.replay_buffer import ReplayBuffer
-import torch
 import random
+
+import numpy as np
+import torch
+
+from src.agent.replay_buffer import ReplayBuffer
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -67,35 +69,32 @@ class DQNAgent:
             raise ValueError('Loss function {} not implemented.'.format(loss_function))
 
     # Adapated from https://github.com/qfettes/DeepRL-Tutorials/blob/master/02.NStep_DQN.ipynb
-    def append_to_replay(self, s, a, s_, r, t):
-        self.n_step_buffer.append((s, a, s_, r))
+    def append_to_replay(self, state, action, next_state, reward, terminal):
+        if self.multi_step:
+            self.n_step_buffer.append((state, action, next_state, reward))
 
-        if (len(self.n_step_buffer) < self.n_steps):
-            return
+            if len(self.n_step_buffer) < self.n_steps:
+                return
 
-        R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(self.n_steps)])
-        state, action, _, _ = self.n_step_buffer.pop(0)
-
-        self.replay_buffer.add_transition(state, action, s_, R, t)
-
-    def finish_n_step(self):
-        while len(self.n_step_buffer) > 0:
-            R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(len(self.n_step_buffer))])
+            R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(self.n_steps)])
             state, action, _, _ = self.n_step_buffer.pop(0)
 
-            self.memory.push((state, action, R, None))
-
-    def train(self, state, action, next_state, reward, terminal):
-        """
-        This method stores a transition to the replay buffer and updates the Q networks.
-        """
-
-        # 1. add current transition to replay buffer
-        if self.multi_step:
-            self.append_to_replay(state, action, next_state, reward, terminal)
+            self.replay_buffer.add_transition(state, action, next_state, R, terminal)
         else:
             self.replay_buffer.add_transition(state, action, next_state, reward, terminal)
 
+    def finish_n_step(self):
+        if self.multi_step:
+            while len(self.n_step_buffer) > 0:
+                R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(len(self.n_step_buffer))])
+                state, action, next_state, _ = self.n_step_buffer.pop(0)
+
+                self.replay_buffer.add_transition(state, action, next_state, R, True)
+
+    def train(self):
+        """
+        This method stores a transition to the replay buffer and updates the Q networks.
+        """
         if self.batch_size > len(self.replay_buffer._data):
             return
 
