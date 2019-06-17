@@ -140,20 +140,11 @@ class DQNAgent:
 
             loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
             loss.backward()
-            for param in self.Q.parameters():
-                param.grad.data.clamp_(-1, 1)
             self.optimizer.step()
 
         #       2.3 call soft update for target network
         if self.soft_update:
             soft_update(self.Q_target, self.Q, self.tau)
-            '''
-            Q_target_update = {}
-            for key in self.Q_target.state_dict().keys():
-                Q_target_update[key] = (1 - self.tau) * self.Q_target.state_dict()[key] \
-                                       + self.tau * self.Q.state_dict()[key]
-            self.Q_target.load_state_dict(Q_target_update)
-            '''
 
     def act(self, state, deterministic):
         """

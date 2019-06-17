@@ -71,28 +71,28 @@ class DeepQNetwork(nn.Module):
     def __init__(self, num_actions, history_length):
         super(DeepQNetwork, self).__init__()
         self.conv1 = nn.Sequential(
-            nn.Conv2d(history_length, 32, kernel_size=8, stride=4),
-            nn.ReLU()
+            nn.Conv2d(history_length, 32, kernel_size=3, stride=2, padding=1),
+            nn.ELU()
         )
         self.conv2 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
-            nn.ReLU()
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.ELU()
         )
         self.conv3 = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
-            nn.ReLU()
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.ELU()
+        )
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.ELU()
         )
         self.hidden = nn.Sequential(
-            nn.Linear(4096, 512, bias=True),
-            nn.ReLU()
+            nn.Linear(1152, 512, bias=True),
+            nn.ELU()
         )
         self.out = nn.Sequential(
             nn.Linear(512, num_actions, bias=True)
         )
-        # Init with cuda if available
-        if torch.cuda.is_available():
-            self.cuda()
-        self.apply(self.weights_init)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -102,20 +102,6 @@ class DeepQNetwork(nn.Module):
         x = self.hidden(x)
         x = self.out(x)
         return x
-
-    @staticmethod
-    def weights_init(m):
-        classname = m.__class__.__name__
-        if classname.find('Conv') != -1:
-            # pass
-            m.weight.data.normal_(0.0, 0.02)
-            # nn.init.xavier_uniform(m.weight)
-        if classname.find('Linear') != -1:
-            pass
-            # m.weight.data.normal_(0.0, 0.02)
-            # m.weight.data.fill_(1)
-            # nn.init.xavier_uniform(m.weight)
-            # m.weight.data.normal_(0.0, 0.008)
 
 
 class Encoder(nn.Module):
@@ -172,6 +158,7 @@ class ForwardModel(nn.Module):
     """
     The forward dynamics model (eq. 4) predicts the embedding of the next state given the current state and the action taken.
     """
+
     def __init__(self, input_dimension=288 + 4, output_dimension=288):
         super(ForwardModel, self).__init__()
         self.hidden = nn.Sequential(
