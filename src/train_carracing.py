@@ -158,10 +158,15 @@ def state_preprocessing(state, normalize=True):
 @click.option('-es', '--epsilon_schedule', default=True, type=click.BOOL)
 @click.option('-ms', '--multi_step', default=True, type=click.BOOL)
 @click.option('-mss', '--multi_step_size', default=3, type=click.INT)
+@click.option('-mu', '--mu_intrinsic', default=1, type=click.INT)
+@click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
+@click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
+@click.option('-oi', '--only_intrinsic', default=False, type=click.BOOL)
 @click.option('-s', '--seed', default=0, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
-         max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size, seed):
+         max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size,
+         mu_intrinsic, beta_intrinsic, lambda_intrinsic, only_intrinsic, seed):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
@@ -203,7 +208,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                      lr=learning_rate, capacity=capacity, number_replays=number_replays, loss_function=loss_function,
                      soft_update=soft_update, algorithm=algorithm, multi_step=multi_step,
                      multi_step_size=multi_step_size, non_uniform_sampling=non_uniform_sampling,
-                     epsilon_schedule=epsilon_schedule)
+                     epsilon_schedule=epsilon_schedule, mu=mu_intrinsic, beta=beta_intrinsic,
+                     lambda_intrinsic=lambda_intrinsic, only_intrinsic=only_intrinsic)
 
     train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
                  num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,
