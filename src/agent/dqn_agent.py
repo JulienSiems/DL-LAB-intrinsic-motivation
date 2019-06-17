@@ -15,10 +15,10 @@ def soft_update(target, source, tau):
 
 class DQNAgent:
 
-    def __init__(self, Q, Q_target, num_actions, capacity, multi_step=True, multi_step_size=3,
-                 non_uniform_sampling=False, gamma=0.95,
-                 batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, number_replays=10, loss_function='L1',
-                 soft_update=False, algorithm='DQN', epsilon_schedule=False, **kwargs):
+    def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, multi_step=True,
+                 multi_step_size=3, non_uniform_sampling=False, gamma=0.95, batch_size=64, epsilon=0.1, tau=0.01,
+                 lr=1e-4, number_replays=10, loss_function='L1', soft_update=False, algorithm='DQN',
+                 epsilon_schedule=False, **kwargs):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -37,6 +37,9 @@ class DQNAgent:
         self.Q = Q
         self.Q_target = Q_target
         self.Q_target.load_state_dict(self.Q.state_dict())
+
+        # intrinsic reward generator
+        self.intrinsic_reward_generator = intrinsic_reward_generator
 
         # define replay buffer
         self.replay_buffer = ReplayBuffer(capacity=capacity)
@@ -133,6 +136,12 @@ class DQNAgent:
             #              self.Q.update(...)
             state_action_values = self.Q(torch.from_numpy(batch_states).to(device).float())
             batch_actions_tensor = torch.from_numpy(batch_actions).to(device).view(-1, 1)
+
+            # Compute intrinsic_reward
+            L_I, L_F, r_i = self.intrinsic_reward_generator.compute_intrinsic_reward(state=batch_states,
+                                                                                     action=batch_actions,
+                                                                                     next_state=batch_next_states)
+
             # Choose the action previously taken
             q_pick = torch.gather(state_action_values, dim=1, index=batch_actions_tensor)
             # Chosen like in this tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html

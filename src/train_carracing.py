@@ -6,7 +6,8 @@ sys.path.append("../")
 
 import gym
 from src.agent.dqn_agent import DQNAgent
-from src.agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork
+from src.agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork, InverseModel, ForwardModel, Encoder
+from src.agent.intrinsic_reward import IntrinsicRewardGenerator
 
 from utils.utils import *
 import click
@@ -38,7 +39,6 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     state = state_preprocessing(state, normalize=normalize_images)
     image_hist.extend([state] * (history_length + 1))
     state = np.array(image_hist).reshape([history_length + 1, 42, 42])
-    # state = state.reshape(3, 96, 96) / 255.0
     while True:
         # get action_id from agent
         # Hint: adapt the probabilities of the 5 actions for random sampling so that the agent explores properly.
@@ -188,9 +188,20 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     Q_net = CNN(num_actions=num_actions, history_length=history_length + 1).to(device)
     Q_target_net = CNN(num_actions=num_actions, history_length=history_length + 1).to(device)
 
-    agent = DQNAgent(Q=Q_net, Q_target=Q_target_net, num_actions=num_actions, gamma=gamma, batch_size=batch_size,
-                     tau=tau, epsilon=epsilon, lr=learning_rate, capacity=capacity, number_replays=number_replays,
-                     loss_function=loss_function, soft_update=soft_update, algorithm=algorithm, multi_step=multi_step,
+    # Intrinsic reward networks
+    state_encoder = Encoder(history_length=history_length + 1)
+    inverse_dynamics_model = InverseModel(num_actions=num_actions)
+    forward_dynamics_model = ForwardModel(num_actions=num_actions)
+
+    intrinsic_reward_network = IntrinsicRewardGenerator(state_encoder=state_encoder,
+                                                        inverse_dynamics_model=inverse_dynamics_model,
+                                                        forward_dynamics_model=forward_dynamics_model,
+                                                        num_actions=num_actions)
+
+    agent = DQNAgent(Q=Q_net, Q_target=Q_target_net, intrinsic_reward_generator=intrinsic_reward_network,
+                     num_actions=num_actions, gamma=gamma, batch_size=batch_size, tau=tau, epsilon=epsilon,
+                     lr=learning_rate, capacity=capacity, number_replays=number_replays, loss_function=loss_function,
+                     soft_update=soft_update, algorithm=algorithm, multi_step=multi_step,
                      multi_step_size=multi_step_size, non_uniform_sampling=non_uniform_sampling,
                      epsilon_schedule=epsilon_schedule)
 
