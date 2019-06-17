@@ -1,5 +1,6 @@
 import tensorflow as tf
 import torch
+import torch.nn.functional as F
 import numpy as np
 from agent.replay_buffer import ReplayBuffer
 import matplotlib.pyplot as plt
@@ -14,7 +15,7 @@ def soft_update(target, source, tau):
 class DQNAgent:
 
     def __init__(self, Q, Q_target, num_actions, gamma=0.95, batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, state_dim=0,
-                 act_dist=None, do_training=False, replay_buffer_size=10000, icm_beta=0.2, icm_lambda=0.1, icm_eta=2, use_extrinsic_reward=True):
+                 act_dist=None, do_training=False, replay_buffer_size=10000, icm_beta=0.2, icm_lambda=0.1, icm_eta=5, use_extrinsic_reward=True):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -66,7 +67,8 @@ class DQNAgent:
 
         self.q_loss_fun = torch.nn.MSELoss()
         self.forward_loss_fun = torch.nn.MSELoss()
-        self.inverse_loss_fun = torch.nn.CrossEntropyLoss()
+        # self.inverse_loss_fun = torch.nn.CrossEntropyLoss()
+        self.inverse_loss_fun = torch.nn.NLLLoss()
 
         self.optimizer = torch.optim.Adam(self.Q.parameters(), lr=lr)
 
@@ -123,9 +125,17 @@ class DQNAgent:
         td_target = batch_rewards + self.gamma * target_action_values
 
         batch_next_states = self.Q.encode(batch_next_states)
-        loss = self.icm_lambda * (action_values-td_target.detach()).pow(2).mean() + \
-                (1 - self.icm_beta) * self.inverse_loss_fun(inv_out, batch_action_ids) + \
-                self.icm_beta * 0.5 * (forward_out-batch_next_states).pow(2).sum() 
+
+        policy_loss = (action_values-td_target.detach()).pow(2).mean()
+        # inverse_loss = self.inverse_loss_fun(inv_out, batch_action_ids)
+        inverse_loss = self.inverse_loss_fun(F.softmax(inv_out, dim=1), batch_action_ids)
+        forward_loss = 0.5 * (forward_out-batch_next_states).pow(2).mean() * batch_next_states.shape[1]
+
+        loss = (self.icm_lambda) * policy_loss + (1 - self.icm_beta) * inverse_loss + self.icm_beta * forward_loss
+
+        print(policy_loss.item(), inverse_loss.item(), forward_loss.item(), loss.item())
+
+        # loss = policy_loss
 
         loss.backward()
         self.optimizer.step()

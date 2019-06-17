@@ -187,7 +187,7 @@ def train_online(env, agent, num_episodes, history_length=1, skip_frames=0, mode
         # evaluate your agent every 'eval_cycle' episodes using run_episode(env, agent, deterministic=True, do_training=False) to
         # check its performance with greedy actions only. You can also use tensorboard to plot the mean episode reward.
         if i % eval_cycle == 0:
-            sns.heatmap(np.transpose(visitation_map), annot=False, linewidths=.5)
+            sns.heatmap(np.transpose(visitation_map), annot=True, linewidths=.5)
             plt.savefig('visit_map_'+str(i)+'.png', bbox_inches="tight")
             plt.clf()
             eval_rewards = []
