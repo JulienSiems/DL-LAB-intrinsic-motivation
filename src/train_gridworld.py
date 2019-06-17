@@ -7,8 +7,9 @@ sys.path.append("../")
 import torch
 import numpy as np
 import gym
+import gym_minigrid
 from agent.dqn_agent import DQNAgent
-from agent.networks import CNN
+from agent.networks import *
 import itertools as it
 from utils.utils import *
 from tensorboardX import SummaryWriter
@@ -16,6 +17,7 @@ from gym import wrappers
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import os
+import seaborn as sns
 
 
 def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rendering=False, max_timesteps=1000,
@@ -25,52 +27,77 @@ def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rend
     deterministic == True => agent executes only greedy actions according the Q function approximator (no random actions).
     do_training == True => train agent
     """
-
+    # plt.interactive(True)
     stats = EpisodeStats()
 
     # Save history
     history_buffer = []
 
     step = 0
-    state = env.reset()
+    e_state = env.reset()
 
     # fix bug of corrupted states without rendering in gym environment
-    env.viewer.window.dispatch_events()
+    # env.viewer.window.dispatch_events()
 
     # append image history to first state
-    n_state = state_preprocessing(state)
-    history_buffer.extend([n_state] * history_length)
+    state = np.zeros((1, e_state['image'].shape[0], e_state['image'].shape[1]))
+    # print(env.agent_pos)
+    state[0, env.agent_pos[0], env.agent_pos[1]] = 1
+    # plt.imshow(state[0, ...], vmin=0, vmax=1)
+    # n_state = state_preprocessing(state)
+    # plt.imshow(n_state[0,0,...], cmap='gray', vmin=0, vmax=1)
+    history_buffer.extend([state] * history_length)
     h_state = np.array(history_buffer)
-    state = np.expand_dims(np.squeeze(np.squeeze(h_state, axis=2), axis=1), axis=0)
+    # state = np.expand_dims(np.squeeze(np.squeeze(h_state, axis=2), axis=1), axis=0)
+    state = h_state
+
+    visitation_map[env.agent_pos[0], env.agent_pos[1]] += 1
 
     loss = 0
     while True:
         # get action_id from agent
         # Hint: adapt the probabilities of the 5 actions for random sampling so that the agent explores properly.
         action_id = agent.act(state=state, deterministic=deterministic)
-        action = id_to_action(action_id, max_speed=0.8)
+        # action = id_to_action(action_id, max_speed=0.8)
+        action = np.zeros((1, agent.num_actions))
+        action[0, action_id] = 1.0
 
         # Hint: frame skipping might help you to get better results.
         reward = 0
         for _ in range(skip_frames + 1):
-            next_state, r, terminal, info = env.step(action)
+            e_next_state, r, terminal, info = env.step(action_id)
+
+            next_state = np.zeros((1, e_next_state['image'].shape[0], e_next_state['image'].shape[1]))
+            next_state[0, env.agent_pos[0], env.agent_pos[1]] = 1
+
+            # next_state = state_preprocessing(next_state)
+            history_buffer.pop()
+            history_buffer.insert(0, next_state)
+            h_state = np.array(history_buffer)
+            # next_state = np.expand_dims(np.squeeze(np.squeeze(h_state, axis=2), axis=1), axis=0)
+            next_state = h_state
+
+            if do_training:
+                visitation_map[env.agent_pos[0], env.agent_pos[1]] += 1
+
+            intrinsic_reward = agent.get_intrinsic_reward(state, next_state, action)
+            if agent.use_extrinsic_reward:
+                r += intrinsic_reward
+            else:
+                r = intrinsic_reward
             reward += r
 
             if rendering:
-                env.render()
+                env.render('human')
 
             if terminal:
                 break
 
-        next_state = state_preprocessing(next_state)
-        history_buffer.pop()
-        history_buffer.insert(0, next_state)
-        h_state = np.array(history_buffer)
-        next_state = np.expand_dims(np.squeeze(np.squeeze(h_state, axis=2), axis=1), axis=0)
+        print(step, action_id, env.agent_pos, reward)
 
         if do_training:
-            if (step * (skip_frames + 1)) > max_timesteps:
-                terminal = True
+            # if (step * (skip_frames + 1)) > max_timesteps:
+            #     terminal = True
             loss = agent.train(state, action_id, next_state, reward, terminal)
 
         stats.step(reward, action_id, loss)
@@ -85,7 +112,7 @@ def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rend
     return stats
 
 
-def train_online(env, agent, num_episodes, history_length=1, skip_frames=0, model_dir="./models_carracing",
+def train_online(env, agent, num_episodes, history_length=1, skip_frames=0, model_dir="./models_gridworld",
                  tensorboard_dir="./tensorboard"):
     if not os.path.exists(model_dir):
         os.mkdir(model_dir)
@@ -94,6 +121,13 @@ def train_online(env, agent, num_episodes, history_length=1, skip_frames=0, mode
     tensorboard = SummaryWriter(log_dir=os.path.join(tensorboard_dir, "train"),
                                 filename_suffix="-Carracing_dqn_hist{}_b{}_vc{}.pt".format(
                                     history_length, agent.batch_size, eval_cycle))
+
+    # if debug_flag:
+    #     dummy_input = torch.zeros(1, 1, 16, 16)
+    #     if torch.cuda.is_available():
+    #         dummy_input = dummy_input.to('cuda')
+    #     p = agent.Q(state=dummy_input, next_state=None, action=None, mode=ICM_GET_ONLY_Q_OUT)
+    #     tensorboard.add_graph(agent.Q, dummy_input)
 
     try:
         checkpoint_data = agent.load(os.path.join(model_dir, "dqn_agent_hist{}_b{}_vc{}.pt".format(history_length,
@@ -125,11 +159,12 @@ def train_online(env, agent, num_episodes, history_length=1, skip_frames=0, mode
     for i in range(epoch_start, num_episodes):
         # Hint: you can keep the episodes short in the beginning by changing max_timesteps (otherwise the car will spend most of the time out of the track)
 
-        max_timesteps = int(min(pow(i / (num_episodes - 100), 1.5) * 1000 + 200, 1000))
+        # max_timesteps = int(min(pow(i / (num_episodes - 100), 1.5) * 1000 + 200, 1000))
+        max_timesteps = 100
         stats = run_episode(env, agent, max_timesteps=max_timesteps, deterministic=False, do_training=True,
                             rendering=True, history_length=history_length, skip_frames=skip_frames)
-        agent.epsilon_max = max(agent.epsilon_final, agent.epsilon_start - i / (num_episodes / 10))
-        agent.epsilon = agent.epsilon_max
+        # agent.epsilon_max = max(agent.epsilon_final, agent.epsilon_start - i / (num_episodes / 10))
+        # agent.epsilon = agent.epsilon_max
 
         tensorboard.add_scalar("Train/Episode Reward", stats.episode_reward, i + 1)
         tensorboard.add_scalar("Train/straight", stats.get_action_usage(STRAIGHT), i + 1)
@@ -152,6 +187,9 @@ def train_online(env, agent, num_episodes, history_length=1, skip_frames=0, mode
         # evaluate your agent every 'eval_cycle' episodes using run_episode(env, agent, deterministic=True, do_training=False) to
         # check its performance with greedy actions only. You can also use tensorboard to plot the mean episode reward.
         if i % eval_cycle == 0:
+            sns.heatmap(np.transpose(visitation_map), annot=False, linewidths=.5)
+            plt.savefig('visit_map_'+str(i)+'.png', bbox_inches="tight")
+            plt.clf()
             eval_rewards = []
             for j in range(num_eval_episodes):
                 stats = run_episode(env, agent, deterministic=True, do_training=False, rendering=True,
@@ -185,14 +223,20 @@ def state_preprocessing(state):
 
 if __name__ == "__main__":
 
-    env = gym.make('CarRacing-v0').unwrapped
+    # env = gym.make('CarRacing-v0').unwrapped
+    env = gym.make('MiniGrid-Empty-16x16-v0')
+    # env = gym.MiniGridEnv(grid=16, agent_view_size=7)
 
-    history_length = 2
-    skip_frames = 3
-    state_dim = (history_length, 96, 96)
-    num_actions = 5
-    action_distribution = [0.3, 0.15, 0.15, 0.35, 0.05]
+    history_length = 1
+    skip_frames = 0
+    state_dim = (history_length, 16, 16)
+    num_actions = 3
+    # action_distribution = [0.3, 0.15, 0.15, 0.35, 0.05]
+    action_distribution = None
     replay_buffer_size = 3e4
+    use_extrinsic_reward = False
+
+    visitation_map = np.zeros((16, 16))
 
     if torch.cuda.is_available():
         batch_size = 32
@@ -200,20 +244,22 @@ if __name__ == "__main__":
         num_eval_episodes = 5
         eval_cycle = 50
         val_max_time_step = 1000
+        debug_flag = False
     else:
         batch_size = 16
         num_episodes = 1005
-        num_eval_episodes = 5
-        eval_cycle = 50
-        val_max_time_step = 1000
+        num_eval_episodes = 1
+        eval_cycle = 10
+        val_max_time_step = 50
+        debug_flag = False
 
     # Define Q network, target network and DQN agent
-    qnet = CNN(history_length=history_length, n_classes=num_actions)
-    qtarget = CNN(history_length=history_length, n_classes=num_actions)
+    qnet = ICMModel(in_shape=state_dim, n_classes=num_actions)
+    qtarget = ICMModel(in_shape=state_dim, n_classes=num_actions)
     agent = DQNAgent(Q=qnet, Q_target=qtarget, num_actions=num_actions, gamma=0.95, batch_size=batch_size, epsilon=0.1,
-                     tau=0.001, lr=2e-4, state_dim=state_dim, act_dist=action_distribution, do_training=True,
-                     replay_buffer_size=replay_buffer_size)
+                     tau=0.001, lr=1e-3, state_dim=state_dim, do_training=True,
+                     replay_buffer_size=replay_buffer_size, act_dist=action_distribution, use_extrinsic_reward=use_extrinsic_reward)
 
     train_online(env, agent, num_episodes=num_episodes, history_length=history_length, skip_frames=skip_frames,
-                 model_dir="./models_carracing")
+                 model_dir="./models_gridworld")
 

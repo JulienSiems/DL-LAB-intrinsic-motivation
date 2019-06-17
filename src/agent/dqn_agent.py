@@ -4,7 +4,7 @@ import numpy as np
 from agent.replay_buffer import ReplayBuffer
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
-
+from agent.networks import *
 
 def soft_update(target, source, tau):
     for target_param, param in zip(target.parameters(), source.parameters()):
@@ -13,7 +13,8 @@ def soft_update(target, source, tau):
 
 class DQNAgent:
 
-    def __init__(self, Q, Q_target, num_actions, gamma=0.95, batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, state_dim=0, act_dist=None, do_training=False, replay_buffer_size=10000):
+    def __init__(self, Q, Q_target, num_actions, gamma=0.95, batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, state_dim=0,
+                 act_dist=None, do_training=False, replay_buffer_size=10000, icm_beta=0.2, icm_lambda=0.1, icm_eta=2, use_extrinsic_reward=True):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -35,6 +36,8 @@ class DQNAgent:
             device_name = 'cpu'
         self.device = torch.device(device_name)
 
+        self.use_extrinsic_reward = use_extrinsic_reward
+
         self.Q = Q.to(self.device)
         self.Q_target = Q_target.to(self.device)
 
@@ -50,6 +53,10 @@ class DQNAgent:
         self.gamma = gamma
         self.tau = tau
 
+        self.icm_beta = icm_beta
+        self.icm_lambda = icm_lambda
+        self.icm_eta = icm_eta
+
         self.epsilon_decay_end = 5 * 10 ** 3
         self.epsilon_start = 0.9
         self.epsilon_final = 0.05
@@ -57,7 +64,10 @@ class DQNAgent:
 
         self.epsilon = epsilon
 
-        self.loss_function = torch.nn.MSELoss()
+        self.q_loss_fun = torch.nn.MSELoss()
+        self.forward_loss_fun = torch.nn.MSELoss()
+        self.inverse_loss_fun = torch.nn.CrossEntropyLoss()
+
         self.optimizer = torch.optim.Adam(self.Q.parameters(), lr=lr)
 
         self.num_actions = num_actions
@@ -85,24 +95,38 @@ class DQNAgent:
 
         self.replay_buffer.add_transition(state, action, next_state, reward, terminal)
 
-        batch_states, batch_actions, batch_next_states, batch_rewards, batch_dones = self.replay_buffer.next_batch(self.batch_size)
+        batch_states, batch_action_ids, batch_next_states, batch_rewards, batch_dones = self.replay_buffer.next_batch(self.batch_size)
         batch_states = torch.from_numpy(batch_states).float().to(self.device)
-        batch_actions = torch.from_numpy(batch_actions).long().to(self.device)
+        batch_action_ids = torch.from_numpy(batch_action_ids).long().to(self.device)
         batch_next_states = torch.from_numpy(batch_next_states).float().to(self.device)
         batch_rewards = torch.from_numpy(batch_rewards).float().to(self.device)
         batch_dones = torch.from_numpy(batch_dones.astype(int)).byte().to(self.device)
 
+        batch_actions = torch.zeros((batch_action_ids.shape[0], self.num_actions))
+        batch_actions[:, batch_action_ids] = 1.0
+
         self.set_train_mode()
         self.optimizer.zero_grad()
-        _, target_actions = self.Q(batch_next_states).max(dim=1)
-        q_target_values = self.Q_target(batch_next_states)
+
+        inv_out, forward_out, q_out = self.Q(state=batch_states, next_state=batch_next_states, action=batch_actions, mode=ICM_GET_ALL_OUT)
+        action_values = q_out.gather(dim=1, index=batch_action_ids.unsqueeze(-1)).squeeze(-1)
+
+        _, _, q_out = self.Q(state=batch_next_states, next_state=None, action=None, mode=ICM_GET_ONLY_Q_OUT)
+        _, target_actions = q_out.max(dim=1)
+
+        _, _, qtarget_out = self.Q_target(state=batch_next_states, next_state=None, action=None, mode=ICM_GET_ONLY_Q_OUT)
+        q_target_values = qtarget_out
+
         target_action_values = q_target_values.gather(dim=1, index=target_actions.unsqueeze(-1)).squeeze(-1)
         target_action_values[batch_dones] = 0.0
-        td_target = batch_rewards + self.gamma * target_action_values
-        q_values = self.Q(batch_states)
-        action_values = q_values.gather(dim=1, index=batch_actions.unsqueeze(-1)).squeeze(-1)
 
-        loss = self.loss_function(action_values, td_target.detach())
+        td_target = batch_rewards + self.gamma * target_action_values
+
+        batch_next_states = self.Q.encode(batch_next_states)
+        loss = self.icm_lambda * (action_values-td_target.detach()).pow(2).mean() + \
+                (1 - self.icm_beta) * self.inverse_loss_fun(inv_out, batch_action_ids) + \
+                self.icm_beta * 0.5 * (forward_out-batch_next_states).pow(2).sum() 
+
         loss.backward()
         self.optimizer.step()
 
@@ -122,21 +146,31 @@ class DQNAgent:
         Returns:
             action id
         """
-        r = np.random.uniform()
+        r = np.random.uniform() if not deterministic else 0
         if deterministic or r > self.epsilon:
             # take greedy action (argmax)
             state = torch.from_numpy(state).float().to(self.device)
-            _, action_id = self.Q(state).view(1, -1).max(dim=1)
+            inv_out, forward_out, q_out = self.Q(state=state, next_state=None, action=None, mode=ICM_GET_ONLY_Q_OUT)
+            _, action_id = q_out.view(1, -1).max(dim=1)
             action_id = action_id.item()
         else:
-
             # sample random action
-            # Hint for the exploration in CarRacing: sampling the action from a uniform distribution will probably not work. 
+            # Hint for the exploration in CarRacing: sampling the action from a uniform distribution will probably not work.
             # You can sample the agents actions with different probabilities (need to sum up to 1) so that the agent will prefer to accelerate or going straight.
             # To see how the agent explores, turn the rendering in the training on and look what the agent is doing.
             action_id = np.random.choice(self.num_actions, p=self.action_probs)
           
         return action_id
+
+    def get_intrinsic_reward(self, state, next_state, action):
+        state = torch.from_numpy(state).float().to(self.device)
+        next_state = torch.from_numpy(next_state).float().to(self.device)
+        action = torch.from_numpy(action).float().to(self.device)
+        inv_out, forward_out, q_out = self.Q(state=state, next_state=next_state, action=action, mode=ICM_GET_ONLY_FORWARD_OUT)
+        next_state = self.Q.encode(next_state)
+        reward = (self.icm_eta * (forward_out-next_state).pow(2).sum()) / 2
+        return reward.item()
+
 
     def save(self, data, file_name):
         torch.save(data, file_name)
