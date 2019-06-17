@@ -157,9 +157,8 @@ class DQNAgent:
             q_pick = torch.gather(state_action_values, dim=1, index=batch_actions_tensor.long())
             # Chosen like in this tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
             self.optimizer.zero_grad()
-
-            loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1)) + \
-                   (1 - self.beta) * L_I + self.beta * L_F
+            expected_reward = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
+            loss = expected_reward + (1 - self.beta) * L_I + self.beta * L_F
             loss.backward()
             self.optimizer.step()
 

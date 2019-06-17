@@ -7,7 +7,7 @@ sys.path.append("../")
 from src.agent.dqn_agent import DQNAgent
 from src.agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork, InverseModel, ForwardModel, Encoder
 from src.agent.intrinsic_reward import IntrinsicRewardGenerator
-from training import train_online
+from src.training import train_online
 
 import retro
 
@@ -45,7 +45,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 @click.option('-mu', '--mu_intrinsic', default=1, type=click.INT)
 @click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
-@click.option('-oi', '--only_intrinsic', default=False, type=click.BOOL)
+@click.option('-oi', '--only_intrinsic', default=True, type=click.BOOL)
 @click.option('-s', '--seed', default=0, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
@@ -58,9 +58,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                                             args_for_filename=['algorithm', 'loss_function', 'num_episodes',
                                                                'number_replays'])
 
-    # launch stuff inside
-    # virtual display here
-    env = retro.make(game='Breakout-Atari2600')
+    env = retro.make(game='SuperMarioBros-Nes')
 
     num_actions = env.action_space.n
 

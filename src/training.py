@@ -66,7 +66,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
         state = next_state
 
-        if terminal or (step * (skip_frames + 1)) > max_timesteps: #  or stats.episode_reward < -20:
+        if terminal or (step * (skip_frames + 1)) > max_timesteps:  # or stats.episode_reward < -20:
             if agent.multi_step:
                 # Finish n step buffer
                 agent.finish_n_step()
@@ -94,11 +94,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                             history_length=history_length, normalize_images=normalize_images)
 
         writer.add_scalar('train_episode_reward', stats.episode_reward, global_step=i)
-        writer.add_scalar('train_straight', stats.get_action_usage(STRAIGHT), global_step=i)
-        writer.add_scalar('train_left', stats.get_action_usage(LEFT), global_step=i)
-        writer.add_scalar('train_right', stats.get_action_usage(RIGHT), global_step=i)
-        writer.add_scalar('train_accel', stats.get_action_usage(ACCELERATE), global_step=i)
-        writer.add_scalar('train_brake', stats.get_action_usage(BRAKE), global_step=i)
+        for action in range(env.action_space.n):
+            writer.add_scalar('train_{}'.format(env.buttons[action]), stats.get_action_usage(action), global_step=i)
 
         # EVALUATION
         # check its performance with greedy actions only. You can also use tensorboard to plot the mean episode reward.
