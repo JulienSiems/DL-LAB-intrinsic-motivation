@@ -4,14 +4,12 @@ import sys
 
 sys.path.append("../")
 
-import gym
 from src.agent.dqn_agent import DQNAgent
 from src.agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork, InverseModel, ForwardModel, Encoder
 from src.agent.intrinsic_reward import IntrinsicRewardGenerator
 from training import train_online
 
-from nes_py.wrappers import JoypadSpace
-import gym_super_mario_bros
+import retro
 
 from utils.utils import *
 import click
@@ -21,13 +19,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 @click.command()
-@click.option('-ne', '--num_episodes', default=1000, type=click.INT, help='train for ... episodes')
+@click.option('-ne', '--num_episodes', default=10000, type=click.INT, help='train for ... episodes')
 @click.option('-ec', '--eval_cycle', default=50, type=click.INT, help='evaluate every ... episodes')
 @click.option('-ne', '--num_eval_episodes', default=1, type=click.INT, help='evaluate this many epochs')
 @click.option('-K', '--number_replays', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
 @click.option('-lr', '--learning_rate', default=1e-4, type=click.FLOAT)
-@click.option('-ca', '--capacity', default=10000, type=click.INT)
+@click.option('-ca', '--capacity', default=20000, type=click.INT)
 @click.option('-g', '--gamma', default=0.95, type=click.FLOAT)
 @click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
 @click.option('-t', '--tau', default=0.01, type=click.FLOAT)
@@ -47,7 +45,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 @click.option('-mu', '--mu_intrinsic', default=1, type=click.INT)
 @click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
-@click.option('-oi', '--only_intrinsic', default=True, type=click.BOOL)
+@click.option('-oi', '--only_intrinsic', default=False, type=click.BOOL)
 @click.option('-s', '--seed', default=0, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
@@ -62,7 +60,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
 
     # launch stuff inside
     # virtual display here
-    env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
+    env = retro.make(game='Breakout-Atari2600')
 
     num_actions = env.action_space.n
 
@@ -80,9 +78,9 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     Q_target_net = CNN(num_actions=num_actions, history_length=history_length + 1).to(device)
 
     # Intrinsic reward networks
-    state_encoder = Encoder(history_length=history_length + 1)
-    inverse_dynamics_model = InverseModel(num_actions=num_actions)
-    forward_dynamics_model = ForwardModel(num_actions=num_actions)
+    state_encoder = Encoder(history_length=history_length + 1).to(device)
+    inverse_dynamics_model = InverseModel(num_actions=num_actions).to(device)
+    forward_dynamics_model = ForwardModel(num_actions=num_actions).to(device)
 
     intrinsic_reward_network = IntrinsicRewardGenerator(state_encoder=state_encoder,
                                                         inverse_dynamics_model=inverse_dynamics_model,

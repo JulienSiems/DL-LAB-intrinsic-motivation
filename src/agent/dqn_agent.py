@@ -139,6 +139,7 @@ class DQNAgent:
                 extrinsic_reward = torch.from_numpy(batch_rewards).to(device).float()
 
             intrinsic_reward = intrinsic_reward.detach() * self.mu
+            # print(intrinsic_reward[0])
             reward = extrinsic_reward + intrinsic_reward
             # Detach from comp graph to avoid that gradients are propagated through the target network.
             next_state_values = next_state_values.detach()
@@ -153,7 +154,7 @@ class DQNAgent:
             batch_actions_tensor = torch.from_numpy(batch_actions).to(device).view(-1, 1)
 
             # Choose the action previously taken
-            q_pick = torch.gather(state_action_values, dim=1, index=batch_actions_tensor)
+            q_pick = torch.gather(state_action_values, dim=1, index=batch_actions_tensor.long())
             # Chosen like in this tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
             self.optimizer.zero_grad()
 

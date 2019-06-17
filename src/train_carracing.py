@@ -155,7 +155,7 @@ def state_preprocessing(state, normalize=True):
 @click.option('-mt', '--max_timesteps', default=1000, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=True, type=click.BOOL)
-@click.option('-es', '--epsilon_schedule', default=True, type=click.BOOL)
+@click.option('-es', '--epsilon_schedule', default=False, type=click.BOOL)
 @click.option('-ms', '--multi_step', default=True, type=click.BOOL)
 @click.option('-mss', '--multi_step_size', default=3, type=click.INT)
 @click.option('-mu', '--mu_intrinsic', default=1, type=click.INT)
@@ -194,9 +194,9 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     Q_target_net = CNN(num_actions=num_actions, history_length=history_length + 1).to(device)
 
     # Intrinsic reward networks
-    state_encoder = Encoder(history_length=history_length + 1)
-    inverse_dynamics_model = InverseModel(num_actions=num_actions)
-    forward_dynamics_model = ForwardModel(num_actions=num_actions)
+    state_encoder = Encoder(history_length=history_length + 1).to(device)
+    inverse_dynamics_model = InverseModel(num_actions=num_actions).to(device)
+    forward_dynamics_model = ForwardModel(num_actions=num_actions).to(device)
 
     intrinsic_reward_network = IntrinsicRewardGenerator(state_encoder=state_encoder,
                                                         inverse_dynamics_model=inverse_dynamics_model,
