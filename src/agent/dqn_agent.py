@@ -138,7 +138,8 @@ class DQNAgent:
             else:
                 extrinsic_reward = torch.from_numpy(batch_rewards).to(device).float()
 
-            reward = extrinsic_reward + intrinsic_reward.detach() * self.mu
+            intrinsic_reward = intrinsic_reward.detach() * self.mu
+            reward = extrinsic_reward + intrinsic_reward
             # Detach from comp graph to avoid that gradients are propagated through the target network.
             next_state_values = next_state_values.detach()
             if self.multi_step:
