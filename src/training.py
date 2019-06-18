@@ -33,7 +33,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     state = np.array(image_hist).reshape([history_length + 1, 42, 42])
 
     possible_actions = np.array(np.identity(env.action_space.n, dtype=int).tolist())
-
+    loss, td_loss, L_I, L_F = 0, 0, 0, 0
     while True:
         # get action_id from agent
         # Hint: adapt the probabilities of the 5 actions for random sampling so that the agent explores properly.
@@ -60,7 +60,9 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         if do_training:
             agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
                                    terminal=terminal)
-            agent.train()
+            loss, td_loss, L_I, L_F = agent.train()
+            if step % 100 == 0:
+                print('Loss', loss)
 
         stats.step(reward, action_id)
 
@@ -79,7 +81,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     if not soft_update:
         agent.Q_target.load_state_dict(agent.Q.state_dict())
 
-    return stats
+    return stats, loss, td_loss, L_I, L_F
 
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
@@ -89,10 +91,16 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
     for i in range(num_episodes):
         print("episode %d" % i)
         max_timesteps_current = max_timesteps
-        stats = run_episode(env, agent, max_timesteps=max_timesteps_current, deterministic=False, do_training=True,
-                            rendering=rendering, soft_update=soft_update, skip_frames=skip_frames,
-                            history_length=history_length, normalize_images=normalize_images)
+        stats, loss, td_loss, L_I, L_F = run_episode(env, agent, max_timesteps=max_timesteps_current,
+                                                     deterministic=False, do_training=True,
+                                                     rendering=rendering, soft_update=soft_update,
+                                                     skip_frames=skip_frames,
+                                                     history_length=history_length, normalize_images=normalize_images)
 
+        writer.add_scalar('train_loss', loss, global_step=i)
+        writer.add_scalar('train_td_loss', td_loss, global_step=i)
+        writer.add_scalar('train_l_i', L_I, global_step=i)
+        writer.add_scalar('train_l_f', L_F, global_step=i)
         writer.add_scalar('train_episode_reward', stats.episode_reward, global_step=i)
         for action in range(env.action_space.n):
             writer.add_scalar('train_{}'.format(env.buttons[action]), stats.get_action_usage(action), global_step=i)
@@ -104,7 +112,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             for j in range(num_eval_episodes):
                 stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=1000,
                                          history_length=history_length, skip_frames=skip_frames,
-                                         normalize_images=normalize_images))
+                                         normalize_images=normalize_images)[0])
             stats_agg = [stat.episode_reward for stat in stats]
             episode_reward_mean, episode_reward_std = np.mean(stats_agg), np.std(stats_agg)
             print('Validation {} +- {}'.format(episode_reward_mean, episode_reward_std))

@@ -15,8 +15,8 @@ def soft_update(target, source, tau):
 
 class DQNAgent:
 
-    def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, only_intrinsic, mu, beta,
-                 lambda_intrinsic, multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95,
+    def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, intrinsic, extrinsic,
+                 mu, beta, lambda_intrinsic, multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95,
                  batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, number_replays=10, loss_function='L1',
                  soft_update=False, algorithm='DQN', epsilon_schedule=False, **kwargs):
         """
@@ -52,7 +52,8 @@ class DQNAgent:
         self.mu = mu
         self.beta = beta
         self.lambda_intrinsic = lambda_intrinsic
-        self.only_intrinsic = only_intrinsic
+        self.intrinsic = intrinsic
+        self.extrinsic = extrinsic
 
         self.number_replays = number_replays
         self.optimizer = torch.optim.Adam(self.Q.parameters(), lr=lr)
@@ -103,7 +104,7 @@ class DQNAgent:
         This method stores a transition to the replay buffer and updates the Q networks.
         """
         if self.batch_size > len(self.replay_buffer._data):
-            return
+            return None, None, None, None
 
         for iter in range(self.number_replays):
             # 2. sample next batch and perform batch update: (initially take less than batch_size because of the replay
@@ -129,16 +130,21 @@ class DQNAgent:
             else:
                 raise ValueError('Algorithm {} not implemented'.format(self.algorithm))
 
-            # Compute intrinsic_reward
-            L_I, L_F, intrinsic_reward = self.intrinsic_reward_generator.compute_intrinsic_reward(state=batch_states,
-                                                                                                  action=batch_actions,
-                                                                                                  next_state=batch_next_states)
-            if self.only_intrinsic:
-                extrinsic_reward = 0
+            if self.intrinsic:
+                # Compute intrinsic_reward
+                L_I, L_F, intrinsic_reward = self.intrinsic_reward_generator.compute_intrinsic_reward(
+                    state=batch_states,
+                    action=batch_actions,
+                    next_state=batch_next_states)
+                intrinsic_reward = intrinsic_reward.detach() * self.mu
             else:
-                extrinsic_reward = torch.from_numpy(batch_rewards).to(device).float()
+                L_I, L_F, intrinsic_reward = [torch.tensor([0], dtype=torch.float, device=device) for _ in range(3)]
 
-            intrinsic_reward = intrinsic_reward.detach() * self.mu
+            if self.extrinsic:
+                extrinsic_reward = torch.from_numpy(batch_rewards).to(device).float()
+            else:
+                extrinsic_reward = 0
+
             # print(intrinsic_reward[0])
             reward = extrinsic_reward + intrinsic_reward
             # Detach from comp graph to avoid that gradients are propagated through the target network.
@@ -157,14 +163,17 @@ class DQNAgent:
             q_pick = torch.gather(state_action_values, dim=1, index=batch_actions_tensor.long())
             # Chosen like in this tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
             self.optimizer.zero_grad()
-            expected_reward = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
-            loss = expected_reward + (1 - self.beta) * L_I + self.beta * L_F
+            # print(L_I.item(), L_F.item())
+            td_loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
+            loss = td_loss + (1 - self.beta) * L_I + self.beta * L_F
             loss.backward()
             self.optimizer.step()
 
         #       2.3 call soft update for target network
         if self.soft_update:
             soft_update(self.Q_target, self.Q, self.tau)
+
+        return loss.item(), td_loss.item(), L_I.item(), L_F.item()
 
     def act(self, state, deterministic):
         """
@@ -181,7 +190,7 @@ class DQNAgent:
             # Like in pytorch tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
             EPS_START = 0.9
             EPS_END = 0.05
-            EPS_DECAY = 10000
+            EPS_DECAY = 30000
             eps_threshold = EPS_END + (EPS_START - EPS_END) * \
                             np.exp(-1. * self.steps_done / EPS_DECAY)
             self.steps_done += 1
@@ -196,7 +205,8 @@ class DQNAgent:
                 action_id = torch.argmax(action_soft).detach().cpu().numpy()
         else:
             if self.non_uniform_sampling:
-                action_id = np.random.choice(self.num_actions, 1, p=[0.45, 0.15, 0.15, 0.15, 0.1])[0]
+                action_id = \
+                    np.random.choice(self.num_actions, 1, p=[0.45, 0.15, 0.15, 0.15, 0.1])[0]
             else:
                 action_id = np.random.randint(self.num_actions)
             # TODO: sample random action
