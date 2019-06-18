@@ -59,15 +59,15 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
-    writer = setup_experiment_folder_writer(inspect.currentframe(), name='car', log_dir='Breakout',
+    writer = setup_experiment_folder_writer(inspect.currentframe(), name='car', log_dir='Mario',
                                             args_for_filename=['algorithm', 'loss_function', 'num_episodes',
                                                                'number_replays'])
 
     # env = retro.make(game='MontezumaRevenge-Atari2600')
     # env = retro.make(game='SpaceInvaders-Atari2600')
-    env = retro.make(game='BreakOut-Atari2600')
+    # env = retro.make(game='BreakOut-Atari2600')
 
-    # env = retro.make(game='SuperMarioBros-Nes')
+    env = retro.make(game='SuperMarioBros-Nes')
     # env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
 
     num_actions = env.action_space.n
