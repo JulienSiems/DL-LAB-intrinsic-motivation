@@ -15,7 +15,8 @@ def soft_update(target, source, tau):
 class DQNAgent:
 
     def __init__(self, Q, Q_target, num_actions, gamma=0.95, batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, state_dim=0,
-                 act_dist=None, do_training=False, replay_buffer_size=10000, icm_beta=0.2, icm_lambda=0.1, icm_eta=5, use_extrinsic_reward=True):
+                 act_dist=None, do_training=False, replay_buffer_size=10000, icm_beta=0.2, icm_lambda=1000, icm_eta=20,
+                 use_icm=True, use_extrinsic_reward=True, policy='e_greedy'):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -37,7 +38,9 @@ class DQNAgent:
             device_name = 'cpu'
         self.device = torch.device(device_name)
 
+        self.use_icm = use_icm
         self.use_extrinsic_reward = use_extrinsic_reward
+        self.policy = policy.lower()
 
         self.Q = Q.to(self.device)
         self.Q_target = Q_target.to(self.device)
@@ -122,20 +125,24 @@ class DQNAgent:
         target_action_values = q_target_values.gather(dim=1, index=target_actions.unsqueeze(-1)).squeeze(-1)
         target_action_values[batch_dones] = 0.0
 
-        td_target = batch_rewards + self.gamma * target_action_values
-
         batch_next_states = self.Q.encode(batch_next_states)
 
+        # intrinsic_reward = (self.icm_eta * (use_extrinsic_reward - batch_next_states).pow(2).sum()) / 2
+
+        td_target = batch_rewards + self.gamma * target_action_values
+
         policy_loss = (action_values-td_target.detach()).pow(2).mean()
-        # inverse_loss = self.inverse_loss_fun(inv_out, batch_action_ids)
-        inverse_loss = self.inverse_loss_fun(F.softmax(inv_out, dim=1), batch_action_ids)
-        forward_loss = 0.5 * (forward_out-batch_next_states).pow(2).mean() * batch_next_states.shape[1]
 
-        loss = (self.icm_lambda) * policy_loss + (1 - self.icm_beta) * inverse_loss + self.icm_beta * forward_loss
+        if self.use_icm:
+            # inverse_loss = self.inverse_loss_fun(inv_out, batch_action_ids)
+            inverse_loss = self.inverse_loss_fun(F.softmax(inv_out, dim=1), batch_action_ids)
+            forward_loss = 0.5 * (forward_out-batch_next_states).pow(2).mean() * batch_next_states.shape[1]
 
-        print(policy_loss.item(), inverse_loss.item(), forward_loss.item(), loss.item())
-
-        # loss = policy_loss
+            loss = (self.icm_lambda) * policy_loss + (1 - self.icm_beta) * inverse_loss + self.icm_beta * forward_loss
+            print(policy_loss.item(), inverse_loss.item(), forward_loss.item(), loss.item())
+        else:
+            loss = policy_loss
+            print(policy_loss.item(), 0, 0, loss.item())
 
         loss.backward()
         self.optimizer.step()
@@ -146,7 +153,6 @@ class DQNAgent:
 
         return loss
 
-
     def act(self, state, deterministic):
         """
         This method creates an epsilon-greedy policy based on the Q-function approximator and epsilon (probability to select a random action)    
@@ -156,7 +162,13 @@ class DQNAgent:
         Returns:
             action id
         """
-        r = np.random.uniform() if not deterministic else 0
+        if deterministic:
+            r = 1
+        elif self.policy == 'random':
+            r = 0
+        else:
+            r = np.random.uniform()
+
         if deterministic or r > self.epsilon:
             # take greedy action (argmax)
             state = torch.from_numpy(state).float().to(self.device)
@@ -180,7 +192,6 @@ class DQNAgent:
         next_state = self.Q.encode(next_state)
         reward = (self.icm_eta * (forward_out-next_state).pow(2).sum()) / 2
         return reward.item()
-
 
     def save(self, data, file_name):
         torch.save(data, file_name)
