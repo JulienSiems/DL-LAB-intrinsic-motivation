@@ -181,7 +181,7 @@ def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rend
             if terminal:
                 break
 
-        print(step, action_id, env.agent_pos, reward)
+        # print(step, action_id, env.agent_pos, reward)
 
         if do_training:
             # if (step * (skip_frames + 1)) > max_timesteps:
@@ -204,7 +204,7 @@ def train_online(env,
                  agent, num_episodes, history_length=1, skip_frames=0, model_dir="./models_gridworld",
                  tensorboard_dir="./tensorboard"):
     global visitation_map
-    visitation_map = np.zeros((16, 16))
+    visitation_map = np.zeros((env.height, env.width))
     uniform_prob = np.array(visitation_map)
     uniform_prob[:, :] = 1 / ((visitation_map.shape[0] - 2) * (visitation_map.shape[1] - 2))
     uniform_prob[:, 0] = 0
@@ -265,7 +265,7 @@ def train_online(env,
         # max_timesteps = int(min(pow(i / (num_episodes - 100), 1.5) * 1000 + 200, 1000))
         max_timesteps = 100
         stats = run_episode(env, agent, max_timesteps=max_timesteps, deterministic=False, do_training=True,
-                            rendering=True, history_length=history_length, skip_frames=skip_frames)
+                            rendering=False, history_length=history_length, skip_frames=skip_frames)
         # agent.epsilon_max = max(agent.epsilon_final, agent.epsilon_start - i / (num_episodes / 10))
         # agent.epsilon = agent.epsilon_max
 
@@ -284,7 +284,7 @@ def train_online(env,
         checkpoint_data['tr_a_accel'].append(stats.get_action_usage(ACCELERATE))
         checkpoint_data['tr_a_brake'].append(stats.get_action_usage(BRAKE))
 
-        print("Episode: {} Epsilon: {}	Timesteps: {}	Reward: {}".format(i, agent.epsilon, max_timesteps,
+        print("Episode: {} Epsilon: {}	    Timesteps: {}	Reward: {}".format(i, agent.epsilon, max_timesteps,
                                                                               stats.episode_reward))
 
         # evaluate your agent every 'eval_cycle' episodes using run_episode(env, agent, deterministic=True, do_training=False) to
@@ -296,20 +296,22 @@ def train_online(env,
             # wdist = wasserstein_distance(obs_prob.ravel(), uniform_prob.ravel())
             # w1dist, _, _ = cv2.EMD(arr_to_sig(obs_prob.reshape(1, 16*16)), arr_to_sig(uniform_prob.reshape(1, 16*16)), cv2.DIST_L2)
             dist, _, _ = cv2.EMD(arr_to_sig(obs_prob), arr_to_sig(uniform_prob), cv2.DIST_L2)
+            coverage = np.count_nonzero(visitation_map) / ((visitation_map.shape[0]-2) * (visitation_map.shape[1]-2))
             checkpoint_data['exploration_dist'].append(dist)
             checkpoint_data['exploration_goal_reached'].append(visitation_map[-2, -2])
             checkpoint_data['exploration_max_freq'].append(visitation_map.max())
-            checkpoint_data['exploration_coverage'].append(np.count_nonzero(visitation_map) / ((visitation_map.shape[0]-2) * (visitation_map.shape[1]-2)))
+            checkpoint_data['exploration_coverage'].append(coverage)
             plt.figure(figsize=(20, 20))
             sns.heatmap(np.transpose(visitation_map), annot=True, linewidths=.5, square=True)
 
             plt.title('EM Distance '+str(dist))
             plt.savefig(os.path.join(save_dir, 'visit_map_'+str(i)+'.png'), bbox_inches="tight")
             plt.clf()
+            print('exploration coverage: {}     dist: {}'.format(coverage, dist))
 
             eval_rewards = []
             for j in range(num_eval_episodes):
-                stats = run_episode(env, agent, deterministic=True, do_training=False, rendering=True,
+                stats = run_episode(env, agent, deterministic=True, do_training=False, rendering=False,
                                     history_length=history_length, max_timesteps=val_max_time_step)
                 eval_rewards.append(stats.episode_reward)
             mean_reward = sum(eval_rewards) / num_eval_episodes
@@ -339,8 +341,8 @@ def state_preprocessing(state):
 
 if __name__ == "__main__":
 
-    # env = gym.make('CarRacing-v0').unwrapped
-    env = gym.make('MiniGrid-Empty-16x16-v0')
+    grid_size = 16
+    env = gym_minigrid.envs.EmptyEnv(size=grid_size)
     num_actions = 3
 
     env = ClassicalGridworldWrapper(env)
@@ -348,15 +350,13 @@ if __name__ == "__main__":
 
     history_length = 1
     skip_frames = 0
-    state_dim = (history_length, 16, 16)
+    state_dim = (history_length, grid_size, grid_size)
     action_distribution = None
     replay_buffer_size = 3e4
     use_icm = True
     use_extrinsic_reward = False
     agent_policy = 'e_greedy'
-    icm_eta = 2
-
-    visitation_map = np.zeros((16, 16))
+    icm_eta = 0.2
 
     if torch.cuda.is_available():
         batch_size = 32

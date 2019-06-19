@@ -140,10 +140,10 @@ class DQNAgent:
             forward_loss = 0.5 * (forward_out-batch_next_states).pow(2).mean() * batch_next_states.shape[1]
 
             loss = (self.icm_lambda) * policy_loss + (1 - self.icm_beta) * inverse_loss + self.icm_beta * forward_loss
-            print(policy_loss.item(), inverse_loss.item(), forward_loss.item(), loss.item())
+            # print(policy_loss.item(), inverse_loss.item(), forward_loss.item(), loss.item())
         else:
             loss = policy_loss
-            print(policy_loss.item(), 0, 0, loss.item())
+            # print(policy_loss.item(), 0, 0, loss.item())
 
         loss.backward()
         self.optimizer.step()
