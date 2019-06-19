@@ -21,6 +21,7 @@ import seaborn as sns
 from scipy.stats import wasserstein_distance
 from datetime import datetime
 import cv2
+from enum import IntEnum
 
 
 def arr_to_sig(arr):
@@ -34,6 +35,73 @@ def arr_to_sig(arr):
             sig[count] = np.array([arr[i, j], i, j])
             count += 1
     return sig
+
+
+# AGENT_DIR_TO_STR = {
+#             0: '>',
+#             1: 'V',
+#             2: '<',
+#             3: '^'
+#         }
+
+class ClassicalGridworldWrapper(gym.Wrapper): #gym_minigrid.MiniGridEnv
+    class ClassicActions(IntEnum):
+        left = 0
+        right = 1
+        up = 2
+        down = 3
+
+    class Actions(IntEnum):
+        left = 0
+        right = 1
+        forward = 2
+
+    class Directions(IntEnum):
+        right = 0
+        down = 1
+        left = 2
+        up = 3
+
+    DICT_OFFSET = 5
+    ACTION_CONVERSION_MAP = {
+        (ClassicActions.left + DICT_OFFSET * Directions.right): [Actions.right, Actions.right, Actions.forward],
+        (ClassicActions.left + DICT_OFFSET * Directions.down): [Actions.right, Actions.forward],
+        (ClassicActions.left + DICT_OFFSET * Directions.left): [Actions.forward],
+        (ClassicActions.left + DICT_OFFSET * Directions.up): [Actions.left, Actions.forward],
+
+        (ClassicActions.right + DICT_OFFSET * Directions.right): [Actions.forward],
+        (ClassicActions.right + DICT_OFFSET * Directions.down): [Actions.left, Actions.forward],
+        (ClassicActions.right + DICT_OFFSET * Directions.left): [Actions.right, Actions.right, Actions.forward],
+        (ClassicActions.right + DICT_OFFSET * Directions.up): [Actions.right, Actions.forward],
+
+        (ClassicActions.up + DICT_OFFSET * Directions.right): [Actions.left, Actions.forward],
+        (ClassicActions.up + DICT_OFFSET * Directions.down): [Actions.right, Actions.right, Actions.forward],
+        (ClassicActions.up + DICT_OFFSET * Directions.left): [Actions.right, Actions.forward],
+        (ClassicActions.up + DICT_OFFSET * Directions.up): [Actions.forward],
+
+        (ClassicActions.down + DICT_OFFSET * Directions.right): [Actions.right, Actions.forward],
+        (ClassicActions.down + DICT_OFFSET * Directions.down): [Actions.forward],
+        (ClassicActions.down + DICT_OFFSET * Directions.left): [Actions.left, Actions.forward],
+        (ClassicActions.down + DICT_OFFSET * Directions.up): [Actions.right, Actions.right, Actions.forward],
+    }
+
+    def __init__(self, env=None):
+        super(ClassicalGridworldWrapper, self).__init__(env)
+
+    def step(self, action):
+        reward = 0
+        next_state = 0
+        terminal = 0
+        action_sequence = ClassicalGridworldWrapper.ACTION_CONVERSION_MAP[action + ClassicalGridworldWrapper.DICT_OFFSET * self.agent_dir]
+        for act in action_sequence:
+            next_state, r, terminal, info = self.env.step(act)
+            reward += r
+            if terminal:
+                break
+        return next_state, r, terminal, info
+
+    def reset(self):
+        return self.env.reset()
 
 
 def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rendering=False, max_timesteps=1000,
@@ -57,7 +125,7 @@ def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rend
     # env.viewer.window.dispatch_events()
 
     # append image history to first state
-    state = np.zeros((1, e_state['image'].shape[0], e_state['image'].shape[1]))
+    state = np.zeros((1, env.width, env.height))
     # print(env.agent_pos)
     state[0, env.agent_pos[0], env.agent_pos[1]] = 1
     # plt.imshow(state[0, ...], vmin=0, vmax=1)
@@ -86,7 +154,7 @@ def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rend
             r = 0
             terminal = False
 
-            next_state = np.zeros((1, e_next_state['image'].shape[0], e_next_state['image'].shape[1]))
+            next_state = np.zeros((1, env.width, env.height))
             next_state[0, env.agent_pos[0], env.agent_pos[1]] = 1
 
             # next_state = state_preprocessing(next_state)
@@ -273,13 +341,14 @@ if __name__ == "__main__":
 
     # env = gym.make('CarRacing-v0').unwrapped
     env = gym.make('MiniGrid-Empty-16x16-v0')
-    # env = gym.MiniGridEnv(grid=16, agent_view_size=7)
+    num_actions = 3
+
+    env = ClassicalGridworldWrapper(env)
+    num_actions = 4
 
     history_length = 1
     skip_frames = 0
     state_dim = (history_length, 16, 16)
-    num_actions = 3
-    # action_distribution = [0.3, 0.15, 0.15, 0.35, 0.05]
     action_distribution = None
     replay_buffer_size = 3e4
     use_icm = True
@@ -312,7 +381,7 @@ if __name__ == "__main__":
                      replay_buffer_size=replay_buffer_size, act_dist=action_distribution, use_icm=use_icm,
                      use_extrinsic_reward=use_extrinsic_reward, policy=agent_policy, icm_eta=icm_eta)
 
-    for _ in range(1):
+    for _ in range(5):
         train_online(env, agent, num_episodes=num_episodes, history_length=history_length, skip_frames=skip_frames,
                  model_dir="./models_gridworld")
 

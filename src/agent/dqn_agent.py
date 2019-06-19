@@ -15,7 +15,7 @@ def soft_update(target, source, tau):
 class DQNAgent:
 
     def __init__(self, Q, Q_target, num_actions, gamma=0.95, batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, state_dim=0,
-                 act_dist=None, do_training=False, replay_buffer_size=10000, icm_beta=0.2, icm_lambda=1000, icm_eta=20,
+                 act_dist=None, do_training=False, replay_buffer_size=10000, icm_beta=0.2, icm_lambda=0.1, icm_eta=20,
                  use_icm=True, use_extrinsic_reward=True, policy='e_greedy'):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
@@ -127,7 +127,8 @@ class DQNAgent:
 
         batch_next_states = self.Q.encode(batch_next_states)
 
-        # intrinsic_reward = (self.icm_eta * (use_extrinsic_reward - batch_next_states).pow(2).sum()) / 2
+        # intrinsic_reward = (self.icm_eta * (forward_out - batch_next_states).pow(2).sum()) / 2
+        # batch_rewards += intrinsic_reward
 
         td_target = batch_rewards + self.gamma * target_action_values
 
