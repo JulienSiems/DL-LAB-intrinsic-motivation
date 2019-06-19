@@ -51,15 +51,16 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
 @click.option('-i', '--intrinsic', default=False, type=click.BOOL)
 @click.option('-e', '--extrinsic', default=True, type=click.BOOL)
+@click.option('-nq', '--num_quants', default=200, type=click.INT)
 @click.option('-s', '--seed', default=0, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
          max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size,
-         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed):
+         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, num_quants, seed):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
-    writer = setup_experiment_folder_writer(inspect.currentframe(), name='car', log_dir='Mario',
+    writer = setup_experiment_folder_writer(inspect.currentframe(), name='Mario', log_dir='Mario',
                                             args_for_filename=['algorithm', 'loss_function', 'num_episodes',
                                                                'number_replays'])
 
@@ -82,8 +83,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     else:
         raise ValueError('{} not implemented'.format(model))
 
-    Q_net = CNN(num_actions=num_actions, history_length=history_length + 1).to(device)
-    Q_target_net = CNN(num_actions=num_actions, history_length=history_length + 1).to(device)
+    Q_net = CNN(num_actions=num_actions, num_quants=num_quants, history_length=history_length + 1).to(device)
+    Q_target_net = CNN(num_actions=num_actions, num_quants=num_quants, history_length=history_length + 1).to(device)
 
     # Intrinsic reward networks
     state_encoder = Encoder(history_length=history_length + 1).to(device)

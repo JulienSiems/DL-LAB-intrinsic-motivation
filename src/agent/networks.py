@@ -68,7 +68,10 @@ class LeNetVariant(nn.Module):
 # https://github.com/diegoalejogm/deep-q-learning/blob/master/utils/net.py
 class DeepQNetwork(nn.Module):
 
-    def __init__(self, num_actions, history_length):
+    def __init__(self, num_actions, num_quants, history_length):
+        self.num_actions = num_actions
+        self.num_quants = num_quants
+
         super(DeepQNetwork, self).__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(history_length, 32, kernel_size=3, stride=2, padding=1),
@@ -91,7 +94,7 @@ class DeepQNetwork(nn.Module):
             nn.ELU()
         )
         self.out = nn.Sequential(
-            nn.Linear(512, num_actions, bias=True)
+            nn.Linear(512, num_actions * num_quants, bias=True)
         )
 
     def forward(self, x):
@@ -101,7 +104,7 @@ class DeepQNetwork(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.hidden(x)
         x = self.out(x)
-        return x
+        return x.view(-1, self.num_actions, self.num_quants)
 
 
 class Encoder(nn.Module):

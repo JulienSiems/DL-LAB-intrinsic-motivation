@@ -13,6 +13,10 @@ def soft_update(target, source, tau):
         target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
 
+def huber(x, k=1.0):
+    return torch.where(x.abs() < k, 0.5 * x.pow(2), k * (x.abs() - 0.5 * k))
+
+
 class DQNAgent:
 
     def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, intrinsic, extrinsic,
@@ -37,6 +41,7 @@ class DQNAgent:
         self.Q = Q
         self.Q_target = Q_target
         self.Q_target.load_state_dict(self.Q.state_dict())
+        self.tau = torch.Tensor((2 * np.arange(self.Q.num_quants) + 1) / (2.0 * self.Q.num_quants)).view(1, -1)
 
         # intrinsic reward generator
         self.intrinsic_reward_generator = intrinsic_reward_generator
@@ -101,7 +106,7 @@ class DQNAgent:
 
     def train(self):
         """
-        This method stores a transition to the replay buffer and updates the Q networks.
+        This method updates the Q network.
         """
         if self.batch_size > len(self.replay_buffer._data):
             return None, None, None, None
@@ -120,13 +125,17 @@ class DQNAgent:
             #              td_target =  reward + discount * max_a Q_target(next_state_batch, a)
             next_state_values = torch.zeros(self.batch_size, device=device)
             if 'DQN' == self.algorithm:
-                next_state_values[non_final_mask] = torch.max(self.Q_target(non_final_next_states), dim=1)[0]
+                Q_next = self.Q_target(torch.from_numpy(batch_next_states).to(device).float()).detach()
+                next_state_values = (1.0 - torch.from_numpy(batch_dones).to(device).float().unsqueeze(1)) * Q_next[
+                    np.arange(self.batch_size), Q_next.mean(2).max(1)[1]]
+                # next_state_values[non_final_mask] = torch.max(self.Q_target(non_final_next_states), dim=1)[0]
             elif 'DDQN' == self.algorithm:
                 # Double DQN
                 # Adapted from https://github.com/Shivanshu-Gupta/Pytorch-Double-DQN/blob/master/agent.py
-                next_state_actions = self.Q(non_final_next_states).max(dim=1)[1]
-                next_state_values[non_final_mask] = \
-                    self.Q_target(non_final_next_states).gather(dim=1, index=next_state_actions.view(-1, 1)).squeeze(1)
+                next_state_actions = self.Q(non_final_next_states).mean(2).max(1)[1]
+                Q_next = self.Q_target(torch.from_numpy(batch_next_states).to(device).float()).detach()
+                next_state_values = (1.0 - torch.from_numpy(batch_dones).to(device).float().unsqueeze(1)) * Q_next[
+                    np.arange(self.batch_size), next_state_actions]
             else:
                 raise ValueError('Algorithm {} not implemented'.format(self.algorithm))
 
@@ -150,22 +159,26 @@ class DQNAgent:
             # Detach from comp graph to avoid that gradients are propagated through the target network.
             next_state_values = next_state_values.detach()
             if self.multi_step:
-                td_target = reward + (self.gamma ** self.n_steps) * next_state_values
+                td_target = reward.unsqueeze(1) + (self.gamma ** self.n_steps) * next_state_values
             else:
-                td_target = reward + self.gamma * next_state_values
+                td_target = reward.unsqueeze(1) + self.gamma * next_state_values
 
             #       2.2 update the Q network
             #              self.Q.update(...)
-            state_action_values = self.Q(torch.from_numpy(batch_states).to(device).float())
             batch_actions_tensor = torch.from_numpy(batch_actions).to(device).view(-1, 1)
 
+            q_pick = self.Q(torch.from_numpy(batch_states).to(device).float())[
+                np.arange(self.batch_size), batch_actions_tensor.long()]
+
             # Choose the action previously taken
-            q_pick = torch.gather(state_action_values, dim=1, index=batch_actions_tensor.long())
+            # q_pick = torch.gather(state_action_values, dim=1, index=batch_actions_tensor.long())
             # Chosen like in this tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
             self.optimizer.zero_grad()
             # print(L_I.item(), L_F.item())
-            td_loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
-            loss = td_loss + (1 - self.beta) * L_I + self.beta * L_F
+            diff = q_pick - td_target
+            td_distr_loss = huber(diff) * (self.tau - (diff.detach() < 0).float()).abs()
+            loss = td_distr_loss + (1 - self.beta) * L_I + self.beta * L_F
+            loss = loss.mean()
             loss.backward()
             self.optimizer.step()
 
@@ -173,7 +186,7 @@ class DQNAgent:
         if self.soft_update:
             soft_update(self.Q_target, self.Q, self.tau)
 
-        return loss.item(), td_loss.item(), L_I.item(), L_F.item()
+        return loss.item(), td_distr_loss.mean().item(), L_I.item(), L_F.item()
 
     def act(self, state, deterministic):
         """
@@ -197,22 +210,18 @@ class DQNAgent:
         else:
             eps_threshold = self.epsilon
         self.eps_threshold = eps_threshold
-        r = np.random.uniform()
         if deterministic or sample > eps_threshold:
             with torch.no_grad():
                 # take greedy action (argmax)
                 action_soft = self.Q(torch.from_numpy(np.expand_dims(state, 0)).to(device).float())
-                action_id = torch.argmax(action_soft).detach().cpu().numpy()
+                action_id = action_soft.mean(2).max(1)[1].detach().cpu().numpy()[0]
         else:
             if self.non_uniform_sampling:
                 action_id = \
                     np.random.choice(self.num_actions, 1, p=[0.45, 0.15, 0.15, 0.15, 0.1])[0]
             else:
                 action_id = np.random.randint(self.num_actions)
-            # TODO: sample random action
-            # Hint for the exploration in CarRacing: sampling the action from a uniform distribution will probably not work. 
-            # You can sample the agents actions with different probabilities (need to sum up to 1) so that the agent will prefer to accelerate or going straight.
-            # To see how the agent explores, turn the rendering in the training on and look what the agent is doing.
+
         return action_id
 
     def save(self, file_name):
