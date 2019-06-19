@@ -117,22 +117,17 @@ class DQNAgent:
             batch_states, batch_actions, batch_next_states, batch_rewards, batch_dones = \
                 self.replay_buffer.next_batch(batch_size=self.batch_size)
 
-            # Set the expected value of a terminated section to zero.
-            non_final_mask = torch.from_numpy(np.array(batch_dones != True, dtype=np.uint8))
-            non_final_next_states = torch.from_numpy(batch_next_states)[non_final_mask].to(device).float()
-
             #       2.1 compute td targets and loss
             #              td_target =  reward + discount * max_a Q_target(next_state_batch, a)
-            next_state_values = torch.zeros(self.batch_size, device=device)
             if 'DQN' == self.algorithm:
                 Q_next = self.Q_target(torch.from_numpy(batch_next_states).to(device).float()).detach()
                 next_state_values = (1.0 - torch.from_numpy(batch_dones).to(device).float().unsqueeze(1)) * Q_next[
                     np.arange(self.batch_size), Q_next.mean(2).max(1)[1]]
-                # next_state_values[non_final_mask] = torch.max(self.Q_target(non_final_next_states), dim=1)[0]
             elif 'DDQN' == self.algorithm:
                 # Double DQN
                 # Adapted from https://github.com/Shivanshu-Gupta/Pytorch-Double-DQN/blob/master/agent.py
-                next_state_actions = self.Q(non_final_next_states).mean(2).max(1)[1]
+                next_state_actions = self.Q(torch.from_numpy(batch_next_states).to(device).float()).mean(2).max(1)[
+                    1].detach()
                 Q_next = self.Q_target(torch.from_numpy(batch_next_states).to(device).float()).detach()
                 next_state_values = (1.0 - torch.from_numpy(batch_dones).to(device).float().unsqueeze(1)) * Q_next[
                     np.arange(self.batch_size), next_state_actions]
