@@ -196,9 +196,9 @@ class DQNAgent:
 
         if self.epsilon_schedule:
             # Like in pytorch tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
-            EPS_START = 0.9
-            EPS_END = 0.05
-            EPS_DECAY = 30000
+            EPS_START = 1.0
+            EPS_END = 0.1
+            EPS_DECAY = 85000
             eps_threshold = EPS_END + (EPS_START - EPS_END) * \
                             np.exp(-1. * self.steps_done / EPS_DECAY)
             self.steps_done += 1

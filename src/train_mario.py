@@ -29,7 +29,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 @click.option('-K', '--number_replays', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
 @click.option('-lr', '--learning_rate', default=1e-4, type=click.FLOAT)
-@click.option('-ca', '--capacity', default=20000, type=click.INT)
+@click.option('-ca', '--capacity', default=30000, type=click.INT)
 @click.option('-g', '--gamma', default=0.95, type=click.FLOAT)
 @click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
 @click.option('-t', '--tau', default=0.01, type=click.FLOAT)
@@ -60,7 +60,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
-    writer = setup_experiment_folder_writer(inspect.currentframe(), name='Mario', log_dir='Mario',
+    writer = setup_experiment_folder_writer(inspect.currentframe(), name='Mario', log_dir='Breakout',
                                             args_for_filename=['algorithm', 'loss_function', 'num_episodes',
                                                                'number_replays'])
 
