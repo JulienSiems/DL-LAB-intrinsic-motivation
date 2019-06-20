@@ -127,8 +127,8 @@ class DQNAgent:
 
         batch_next_states = self.Q.encode(batch_next_states)
 
-        # intrinsic_reward = (self.icm_eta * (forward_out - batch_next_states).pow(2).sum()) / 2
-        # batch_rewards += intrinsic_reward
+        intrinsic_reward = (self.icm_eta * (forward_out - batch_next_states).pow(2).sum()) / 2
+        batch_rewards += intrinsic_reward.detach()
 
         td_target = batch_rewards + self.gamma * target_action_values
 

@@ -167,12 +167,12 @@ def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rend
             if do_training:
                 visitation_map[env.agent_pos[0], env.agent_pos[1]] += 1
 
-            if agent.use_icm and do_training:
-                intrinsic_reward = agent.get_intrinsic_reward(state, next_state, action)
-                if agent.use_extrinsic_reward:
-                    r += intrinsic_reward
-                else:
-                    r = intrinsic_reward
+            # if agent.use_icm and do_training:
+            #     intrinsic_reward = agent.get_intrinsic_reward(state, next_state, action)
+            #     if agent.use_extrinsic_reward:
+            #         r += intrinsic_reward
+            #     else:
+            #         r = intrinsic_reward
             reward += r
 
             if rendering:
@@ -221,7 +221,7 @@ def train_online(env,
     os.mkdir(save_dir)
 
     print("... train agent")
-    tensorboard = SummaryWriter(log_dir=save_dir, filename_suffix="-Gridworld_dqn")
+    tensorboard = SummaryWriter(logdir=save_dir, filename_suffix="-Gridworld_dqn")
 
     # if debug_flag:
     #     dummy_input = torch.zeros(1, 1, 16, 16)
@@ -265,7 +265,7 @@ def train_online(env,
         # max_timesteps = int(min(pow(i / (num_episodes - 100), 1.5) * 1000 + 200, 1000))
         max_timesteps = 100
         stats = run_episode(env, agent, max_timesteps=max_timesteps, deterministic=False, do_training=True,
-                            rendering=False, history_length=history_length, skip_frames=skip_frames)
+                            rendering=True, history_length=history_length, skip_frames=skip_frames)
         # agent.epsilon_max = max(agent.epsilon_final, agent.epsilon_start - i / (num_episodes / 10))
         # agent.epsilon = agent.epsilon_max
 
@@ -311,7 +311,7 @@ def train_online(env,
 
             eval_rewards = []
             for j in range(num_eval_episodes):
-                stats = run_episode(env, agent, deterministic=True, do_training=False, rendering=False,
+                stats = run_episode(env, agent, deterministic=True, do_training=False, rendering=True,
                                     history_length=history_length, max_timesteps=val_max_time_step)
                 eval_rewards.append(stats.episode_reward)
             mean_reward = sum(eval_rewards) / num_eval_episodes
@@ -381,7 +381,7 @@ if __name__ == "__main__":
                      replay_buffer_size=replay_buffer_size, act_dist=action_distribution, use_icm=use_icm,
                      use_extrinsic_reward=use_extrinsic_reward, policy=agent_policy, icm_eta=icm_eta)
 
-    for _ in range(5):
+    for _ in range(1):
         train_online(env, agent, num_episodes=num_episodes, history_length=history_length, skip_frames=skip_frames,
                  model_dir="./models_gridworld")
 

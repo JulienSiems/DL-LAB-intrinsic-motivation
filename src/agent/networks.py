@@ -143,6 +143,17 @@ class ICMModel(nn.Module):
             self.elu,
         )
 
+        self.q_cnn = nn.Sequential(
+            nn.Conv2d(in_shape[0], 32, kernel_size=3, stride=2, padding=1, bias=False),
+            self.elu,
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1, bias=False),
+            self.elu,
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1, bias=False),
+            self.elu,
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1, bias=False),
+            self.elu,
+        )
+
         dummy_input = torch.zeros(1, in_shape[0], in_shape[1], in_shape[2])
         out_cnn = self.cnn(dummy_input)
         out_cnn = out_cnn.view(out_cnn.size(0), -1)
@@ -154,7 +165,7 @@ class ICMModel(nn.Module):
 
     def forward(self, state, next_state, action, mode=ICM_GET_ALL_OUT):
         if mode == ICM_GET_ONLY_Q_OUT:
-            xt = self.cnn(state)
+            xt = self.q_cnn(state)
             xt = xt.view(xt.size(0), -1)
             q_out = self.q_net(xt)
             inverse_out = 0
@@ -175,6 +186,9 @@ class ICMModel(nn.Module):
             forward_in = torch.cat([xt, action], dim=1)
             inverse_out = self.inverse_net(inverse_in)
             forward_out = self.forward_net(forward_in)
+
+            xt = self.q_cnn(state)
+            xt = xt.view(xt.size(0), -1)
             q_out = self.q_net(xt)
         return inverse_out, forward_out, q_out
 
