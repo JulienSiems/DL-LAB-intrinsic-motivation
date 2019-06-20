@@ -95,12 +95,25 @@ class DeepQNetwork(nn.Module):
         out_cnn = out_cnn.view(out_cnn.size(0), -1)
         cnn_out_size = out_cnn.shape[1]
 
-        self.hidden = nn.Sequential(
-            nn.Linear(cnn_out_size, 512, bias=True),
-            nn.ELU()
+        # self.hidden = nn.Sequential(
+        #     nn.Linear(cnn_out_size, 512, bias=True),
+        #     nn.ELU()
+        # )
+        # self.out = nn.Sequential(
+        #     nn.Linear(512, num_actions, bias=True)
+        # )
+
+        fc_out = 128
+        self.elu = nn.ELU(inplace=True)
+        self.fc_net = nn.Sequential(
+            nn.Linear(cnn_out_size, fc_out),
+            self.elu,
         )
-        self.out = nn.Sequential(
-            nn.Linear(512, num_actions, bias=True)
+        self.fc_adv_net = nn.Sequential(
+            nn.Linear(fc_out, num_actions)
+        )
+        self.fc_val_net = nn.Sequential(
+            nn.Linear(fc_out, 1),
         )
 
     def forward(self, x):
@@ -109,8 +122,14 @@ class DeepQNetwork(nn.Module):
         x = self.conv3(x)
         x = self.conv4(x)
         x = x.view(x.size(0), -1)
-        x = self.hidden(x)
-        x = self.out(x)
+        # x = self.hidden(x)
+        # x = self.out(x)
+
+        xf = self.fc_net(x)
+        val = self.fc_val_net(xf)
+        adv = self.fc_adv_net(xf)
+        x = val + adv - adv.mean()
+
         return x
 
 
