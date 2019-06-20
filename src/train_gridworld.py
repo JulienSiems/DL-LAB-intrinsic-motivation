@@ -271,7 +271,7 @@ def state_preprocessing(state, normalize=True):
 @click.option('-su', '--soft_update', default=True, type=click.BOOL)
 @click.option('-hl', '--history_length', default=0, type=click.INT)
 @click.option('-sf', '--skip_frames', default=0, type=click.INT)
-@click.option('-lf', '--loss_function', default='L1', type=click.Choice(['L1', 'L2']))
+@click.option('-lf', '--loss_function', default='L2', type=click.Choice(['L1', 'L2']))
 @click.option('-al', '--algorithm', default='DDQN', type=click.Choice(['DQN', 'DDQN']))
 @click.option('-mo', '--model', default='DeepQNetwork', type=click.Choice(['Resnet', 'Lenet', 'DeepQNetwork']))
 @click.option('-su', '--render_training', default=True, type=click.BOOL)
@@ -293,10 +293,6 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
          mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed):
     # Set seed
     torch.manual_seed(seed)
-    # Create experiment directory with run configuration
-    writer = setup_experiment_folder_writer(inspect.currentframe(), name='gridworld', log_dir='classic_gridworld_report',
-                                            args_for_filename=['algorithm', 'loss_function', 'num_episodes',
-                                                               'number_replays'])
 
     # launch stuff inside
     # virtual display here
@@ -346,11 +342,17 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                      epsilon_schedule=epsilon_schedule, mu=mu_intrinsic, beta=beta_intrinsic,
                      lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic, extrinsic=extrinsic)
 
-    train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
-                 num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,
-                 history_length=history_length, rendering=render_training, max_timesteps=max_timesteps,
-                 normalize_images=normalize_images)
-    writer.close()
+
+    for _ in range(1):
+        # Create experiment directory with run configuration
+        writer = setup_experiment_folder_writer(inspect.currentframe(), name='gridworld', log_dir='classic_gridworld_report',
+                                                args_for_filename=['algorithm', 'loss_function', 'num_episodes',
+                                                                   'number_replays'])
+        train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
+                     num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,
+                     history_length=history_length, rendering=render_training, max_timesteps=max_timesteps,
+                     normalize_images=normalize_images)
+        writer.close()
 
 
 if __name__ == "__main__":
