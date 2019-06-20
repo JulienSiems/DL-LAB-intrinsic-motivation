@@ -164,7 +164,8 @@ class DQNAgent:
             # Chosen like in this tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
             self.optimizer.zero_grad()
             # print(L_I.item(), L_F.item())
-            td_loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
+            # td_loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
+            td_loss = (q_pick-td_target.detach()).pow(2).mean()
             loss = self.lambda_intrinsic * td_loss + (1 - self.beta) * L_I + self.beta * L_F
             loss.backward()
             self.optimizer.step()
