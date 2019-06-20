@@ -68,7 +68,7 @@ class LeNetVariant(nn.Module):
 # https://github.com/diegoalejogm/deep-q-learning/blob/master/utils/net.py
 class DeepQNetwork(nn.Module):
 
-    def __init__(self, num_actions, history_length):
+    def __init__(self, in_dim, num_actions, history_length):
         super(DeepQNetwork, self).__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(history_length, 32, kernel_size=3, stride=2, padding=1),
@@ -86,8 +86,17 @@ class DeepQNetwork(nn.Module):
             nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
             nn.ELU()
         )
+
+        dummy_input = torch.zeros(1, in_dim[0], in_dim[1], in_dim[2])
+        x = self.conv1(dummy_input)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        out_cnn = self.conv4(x)
+        out_cnn = out_cnn.view(out_cnn.size(0), -1)
+        cnn_out_size = out_cnn.shape[1]
+
         self.hidden = nn.Sequential(
-            nn.Linear(1152, 512, bias=True),
+            nn.Linear(cnn_out_size, 512, bias=True),
             nn.ELU()
         )
         self.out = nn.Sequential(
@@ -98,6 +107,7 @@ class DeepQNetwork(nn.Module):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
+        x = self.conv4(x)
         x = x.view(x.size(0), -1)
         x = self.hidden(x)
         x = self.out(x)
