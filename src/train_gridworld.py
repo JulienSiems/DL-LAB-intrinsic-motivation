@@ -92,6 +92,7 @@ class ClassicalGridworldWrapper(gym.Wrapper):
         reward = 0
         next_state = 0
         terminal = 0
+        r = 0
         action_sequence = ClassicalGridworldWrapper.ACTION_CONVERSION_MAP[action + ClassicalGridworldWrapper.DICT_OFFSET * self.agent_dir]
         for act in action_sequence:
             next_state, r, terminal, info = self.env.step(act)
@@ -118,34 +119,33 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     # Save history
     image_hist = []
 
+    frame = np.zeros((1, env.width, env.height))
+
     step = 0
     state = env.reset()
-    state = np.zeros((1, env.width, env.height))
-    state[0, env.agent_pos[0], env.agent_pos[1]] = 1
+
+    frame[0, env.agent_pos[0], env.agent_pos[1]] = 1
 
     # fix bug of corrupted states without rendering in gym environment
     # env.viewer.window.dispatch_events()
 
     # append image history to first state
     # state = state_preprocessing(state, normalize=normalize_images)
-    image_hist.extend([state] * (history_length + 1))
+    image_hist.extend([frame] * (history_length + 1))
     state = np.array(image_hist).reshape([history_length + 1, env.height, env.width])
+    frame[0, env.agent_pos[0], env.agent_pos[1]] = 0
+
     while True:
         # get action_id from agent
         # Hint: adapt the probabilities of the 5 actions for random sampling so that the agent explores properly.
         action_id = agent.act(state=state, deterministic=deterministic)
-        # action = np.zeros((1, agent.num_actions))
-        # action[0, action_id] = 1.0
-        # action = torch.nn.functional.one_hot(action_id.long(), num_classes=agent.num_actions)
+        action = np.array([action_id])
 
         # Hint: frame skipping might help you to get better results.
         reward = 0
         for _ in range(skip_frames + 1):
             next_state, r, terminal, info = env.step(action_id)
             terminal = False
-
-            next_state = np.zeros((1, env.width, env.height))
-            next_state[0, env.agent_pos[0], env.agent_pos[1]] = 1
 
             reward += r
 
@@ -155,10 +155,24 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             if terminal:
                 break
 
+        if not agent.extrinsic:
+            reward = 0
+
+        frame[0, env.agent_pos[0], env.agent_pos[1]] = 1
         # next_state = state_preprocessing(next_state)
-        image_hist.append(next_state)
+        image_hist.append(frame)
         image_hist.pop(0)
         next_state = np.array(image_hist).reshape([history_length + 1, env.height, env.width])
+        frame[0, env.agent_pos[0], env.agent_pos[1]] = 0
+
+        if agent.intrinsic and agent.pre_intrinsic:
+            # Compute intrinsic_reward
+            L_I, L_F, intrinsic_reward = agent.intrinsic_reward_generator.compute_intrinsic_reward(
+                state=np.expand_dims(state, axis=0),
+                action=action,
+                next_state=np.expand_dims(next_state, axis=0))
+            intrinsic_reward = intrinsic_reward.detach() * agent.mu
+            reward += intrinsic_reward.item()
 
         if do_training:
             visitation_map[env.agent_pos[0], env.agent_pos[1]] += 1
@@ -224,11 +238,11 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             writer.add_scalar('exploration_coverage', coverage, global_step=i)
             writer.add_scalar('exploration_EM_distance', dist, global_step=i)
 
-            plt.figure(figsize=(20, 20))
-            sns.heatmap(np.transpose(visitation_map), annot=True, linewidths=.5, square=True)
-            plt.title('EM Distance ' + str(dist))
-            plt.savefig(os.path.join(writer.logdir, 'visit_map_' + str(i) + '.png'), bbox_inches="tight")
-            plt.clf()
+            # plt.figure(figsize=(20, 20))
+            # sns.heatmap(np.transpose(visitation_map), annot=True, linewidths=.5, square=True)
+            # plt.title('EM Distance ' + str(dist))
+            # plt.savefig(os.path.join(writer.logdir, 'visit_map_' + str(i) + '.png'), bbox_inches="tight")
+            # plt.clf()
             print('exploration coverage: {}     dist: {}'.format(coverage, dist))
 
             stats = []
@@ -258,7 +272,7 @@ def state_preprocessing(state, normalize=True):
 
 
 @click.command()
-@click.option('-ne', '--num_episodes', default=51, type=click.INT, help='train for ... episodes')
+@click.option('-ne', '--num_episodes', default=1001, type=click.INT, help='train for ... episodes')
 @click.option('-ec', '--eval_cycle', default=10, type=click.INT, help='evaluate every ... episodes')
 @click.option('-ne', '--num_eval_episodes', default=1, type=click.INT, help='evaluate this many epochs')
 @click.option('-K', '--number_replays', default=1, type=click.INT)
@@ -275,28 +289,30 @@ def state_preprocessing(state, normalize=True):
 @click.option('-al', '--algorithm', default='DDQN', type=click.Choice(['DQN', 'DDQN']))
 @click.option('-mo', '--model', default='DeepQNetwork', type=click.Choice(['Resnet', 'Lenet', 'DeepQNetwork']))
 @click.option('-su', '--render_training', default=True, type=click.BOOL)
-@click.option('-mt', '--max_timesteps', default=100, type=click.INT)
+@click.option('-mt', '--max_timesteps', default=500, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=False, type=click.BOOL)
 @click.option('-es', '--epsilon_schedule', default=False, type=click.BOOL)
 @click.option('-ms', '--multi_step', default=False, type=click.BOOL)
 @click.option('-mss', '--multi_step_size', default=3, type=click.INT)
-@click.option('-mu', '--mu_intrinsic', default=0.2, type=click.FLOAT)
+@click.option('-mu', '--mu_intrinsic', default=5, type=click.FLOAT)
 @click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
 @click.option('-i', '--intrinsic', default=True, type=click.BOOL)
 @click.option('-e', '--extrinsic', default=False, type=click.BOOL)
 @click.option('-s', '--seed', default=0, type=click.INT)
+@click.option('-grid', '--env_grid', default=100, type=click.INT)
+@click.option('-pre_icm', '--pre_intrinsic', default=True, type=click.BOOL)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
          max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size,
-         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed):
+         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed, env_grid, pre_intrinsic):
     # Set seed
     torch.manual_seed(seed)
 
     # launch stuff inside
     # virtual display here
-    grid_size = 16
+    grid_size = env_grid
     env = gym_minigrid.envs.EmptyEnv(size=grid_size)
     num_actions = 3
 
@@ -321,7 +337,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     state_encoder = Encoder(history_length=history_length + 1).to(device)
     # Intrinsic reward networks
 
-    dummy_input = torch.zeros(1, state_dim[0], state_dim[1], state_dim[2])
+    dummy_input = torch.zeros(1, state_dim[0], state_dim[1], state_dim[2]).to(device)
     out_cnn = state_encoder(dummy_input)
     out_cnn = out_cnn.view(out_cnn.size(0), -1)
     cnn_out_size = out_cnn.shape[1]
@@ -341,7 +357,6 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                      multi_step_size=multi_step_size, non_uniform_sampling=non_uniform_sampling,
                      epsilon_schedule=epsilon_schedule, mu=mu_intrinsic, beta=beta_intrinsic,
                      lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic, extrinsic=extrinsic)
-
 
     for _ in range(1):
         # Create experiment directory with run configuration

@@ -18,7 +18,7 @@ class DQNAgent:
     def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, intrinsic, extrinsic,
                  mu, beta, lambda_intrinsic, multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95,
                  batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, number_replays=10, loss_function='L1',
-                 soft_update=False, algorithm='DQN', epsilon_schedule=False, **kwargs):
+                 soft_update=False, algorithm='DQN', epsilon_schedule=False, pre_intrinsic=True, **kwargs):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -54,6 +54,7 @@ class DQNAgent:
         self.lambda_intrinsic = lambda_intrinsic
         self.intrinsic = intrinsic
         self.extrinsic = extrinsic
+        self.pre_intrinsic = pre_intrinsic
 
         self.number_replays = number_replays
         self.optimizer = torch.optim.Adam(self.Q.parameters(), lr=lr)
@@ -140,13 +141,14 @@ class DQNAgent:
             else:
                 L_I, L_F, intrinsic_reward = [torch.tensor([0], dtype=torch.float, device=device) for _ in range(3)]
 
-            if self.extrinsic:
+            if self.extrinsic or self.pre_intrinsic:
                 extrinsic_reward = torch.from_numpy(batch_rewards).to(device).float()
             else:
                 extrinsic_reward = 0
 
             # print(intrinsic_reward[0])
-            reward = extrinsic_reward + intrinsic_reward
+            reward = extrinsic_reward + (intrinsic_reward if not self.pre_intrinsic else 0)
+
             # Detach from comp graph to avoid that gradients are propagated through the target network.
             next_state_values = next_state_values.detach()
             if self.multi_step:
