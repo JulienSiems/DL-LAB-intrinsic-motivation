@@ -168,7 +168,7 @@ class InverseModel(nn.Module):
     The inverse dynamics model (eq. 2) predicts the action taken between state s_t and s_t+1
     """
 
-    def __init__(self, num_actions=4, input_dimension=288 * 2):
+    def __init__(self, num_actions=4, input_dimension=1152 * 2):
         super(InverseModel, self).__init__()
         self.hidden = nn.Sequential(
             nn.Linear(input_dimension, 256, bias=True),
@@ -188,7 +188,7 @@ class ForwardModel(nn.Module):
     The forward dynamics model (eq. 4) predicts the embedding of the next state given the current state and the action taken.
     """
 
-    def __init__(self, num_actions, dim_s=288, output_dimension=288):
+    def __init__(self, num_actions, dim_s=1152, output_dimension=1152):
         super(ForwardModel, self).__init__()
         self.hidden = nn.Sequential(
             nn.Linear(num_actions + dim_s, 256, bias=True),

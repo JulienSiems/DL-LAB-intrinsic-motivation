@@ -78,7 +78,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
 
     num_actions = env.action_space.n
 
-    state_dim = (history_length + 1, 42, 42)
+    state_dim = (history_length + 1, 84, 84)
 
     # Define Q network, target network and DQN agent
     if model == 'Resnet':

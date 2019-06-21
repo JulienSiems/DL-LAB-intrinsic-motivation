@@ -30,7 +30,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     # append image history to first state
     state = state_preprocessing(state, normalize=normalize_images)
     image_hist.extend([state] * (history_length + 1))
-    state = np.array(image_hist).reshape([history_length + 1, 42, 42])
+    state = np.array(image_hist).reshape([history_length + 1, 84, 84])
 
     loss, td_loss, L_I, L_F = 0, 0, 0, 0
     while True:
@@ -58,7 +58,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         next_state = state_preprocessing(next_state)
         image_hist.append(next_state)
         image_hist.pop(0)
-        next_state = np.array(image_hist).reshape([history_length + 1, 42, 42])
+        next_state = np.array(image_hist).reshape([history_length + 1, 84, 84])
 
         if do_training:
             agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
@@ -132,7 +132,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
 
 
 def state_preprocessing(state, normalize=True):
-    image_resized = Image.fromarray(state).resize((42, 42), Image.ANTIALIAS)
+    image_resized = Image.fromarray(state).resize((84, 84), Image.ANTIALIAS)
     image_resized_bw = rgb2gray(np.array(image_resized))
     if normalize:
         image_resized_bw = image_resized_bw / 255.0
