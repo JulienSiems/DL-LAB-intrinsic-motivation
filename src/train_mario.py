@@ -43,23 +43,29 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 @click.option('-mt', '--max_timesteps', default=5000, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=False, type=click.BOOL)
-@click.option('-es', '--epsilon_schedule', default=True, type=click.BOOL)
 @click.option('-ms', '--multi_step', default=True, type=click.BOOL)
 @click.option('-mss', '--multi_step_size', default=3, type=click.INT)
 @click.option('-mu', '--mu_intrinsic', default=10, type=click.INT)
 @click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
-@click.option('-i', '--intrinsic', default=False, type=click.BOOL)
-@click.option('-e', '--extrinsic', default=True, type=click.BOOL)
+@click.option('-i', '--intrinsic', default=True, type=click.BOOL)
+@click.option('-e', '--extrinsic', default=False, type=click.BOOL)
+@click.option('-uq', '--update_q_target', default=1000, type=click.INT,
+              help='How many steps to pass between each q_target update')
+@click.option('-es', '--epsilon_schedule', default=True, type=click.BOOL)
+@click.option('-est', '--epsilon_start', default=0.9, type=click.FLOAT)
+@click.option('-end', '--epsilon_end', default=0.05, type=click.FLOAT)
+@click.option('-edc', '--epsilon_decay', default=30000, type=click.INT)
 @click.option('-s', '--seed', default=0, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
-         max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size,
-         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed):
+         max_timesteps, normalize_images, non_uniform_sampling, multi_step, multi_step_size, mu_intrinsic,
+         beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, update_q_target, epsilon_schedule, epsilon_start,
+         epsilon_end, epsilon_decay, seed):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
-    writer = setup_experiment_folder_writer(inspect.currentframe(), name='car', log_dir='Mario',
+    writer = setup_experiment_folder_writer(inspect.currentframe(), name='Mario', log_dir='Mario',
                                             args_for_filename=['algorithm', 'loss_function', 'num_episodes',
                                                                'number_replays'])
 
@@ -72,6 +78,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
 
     num_actions = env.action_space.n
 
+    state_dim = (history_length + 1, 42, 42)
+
     # Define Q network, target network and DQN agent
     if model == 'Resnet':
         CNN = ResnetVariant
@@ -82,8 +90,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     else:
         raise ValueError('{} not implemented'.format(model))
 
-    Q_net = CNN(num_actions=num_actions, history_length=history_length + 1).to(device)
-    Q_target_net = CNN(num_actions=num_actions, history_length=history_length + 1).to(device)
+    Q_net = CNN(in_dim=state_dim, num_actions=num_actions, history_length=history_length + 1).to(device)
+    Q_target_net = CNN(in_dim=state_dim, num_actions=num_actions, history_length=history_length + 1).to(device)
 
     # Intrinsic reward networks
     state_encoder = Encoder(history_length=history_length + 1).to(device)
@@ -101,7 +109,9 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                      soft_update=soft_update, algorithm=algorithm, multi_step=multi_step,
                      multi_step_size=multi_step_size, non_uniform_sampling=non_uniform_sampling,
                      epsilon_schedule=epsilon_schedule, mu=mu_intrinsic, beta=beta_intrinsic,
-                     lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic, extrinsic=extrinsic)
+                     update_q_target=update_q_target, lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic,
+                     epsilon_start=epsilon_start, epsilon_end=epsilon_end, epsilon_decay=epsilon_decay,
+                     extrinsic=extrinsic)
 
     train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
                  num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,

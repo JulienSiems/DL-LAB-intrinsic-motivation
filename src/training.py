@@ -61,6 +61,12 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
                                    terminal=terminal)
             loss, td_loss, L_I, L_F = agent.train()
+
+            # Update the target network
+            if not soft_update and agent.steps_done % agent.update_q_target == 0:
+                print('Updating Q_target')
+                agent.Q_target.load_state_dict(agent.Q.state_dict())
+
             if step % 100 == 0:
                 print('Loss', loss)
 
@@ -76,10 +82,6 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         step += 1
 
     print('epsilon_threshold', agent.eps_threshold)
-
-    # Update the target network
-    if not soft_update:
-        agent.Q_target.load_state_dict(agent.Q.state_dict())
 
     return stats, loss, td_loss, L_I, L_F
 
