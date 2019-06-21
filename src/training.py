@@ -44,6 +44,11 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             next_state, r, terminal, info = env.step(action_id)
             reward += r
 
+            if terminal:
+                # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
+                agent.n_step_buffer = []
+                return loss, td_loss, L_I, L_F
+
             if rendering:
                 env.render()
 
@@ -74,8 +79,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
         if terminal or (step * (skip_frames + 1)) > max_timesteps:  # or stats.episode_reward < -20:
             if agent.multi_step:
-                # Finish n step buffer
-                agent.finish_n_step()
+                # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
+                agent.n_step_buffer = []
             break
         step += 1
 
