@@ -103,7 +103,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         writer.add_scalar('train_l_f', L_F, global_step=i)
         writer.add_scalar('train_episode_reward', stats.episode_reward, global_step=i)
         for action in range(env.action_space.n):
-            writer.add_scalar('train_{}'.format(env.buttons[action]), stats.get_action_usage(action), global_step=i)
+            writer.add_scalar('train_{}'.format(action), stats.get_action_usage(action), global_step=i)
 
         # EVALUATION
         # check its performance with greedy actions only. You can also use tensorboard to plot the mean episode reward.
