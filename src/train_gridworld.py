@@ -258,7 +258,7 @@ def state_preprocessing(state, normalize=True):
 
 
 @click.command()
-@click.option('-ne', '--num_episodes', default=51, type=click.INT, help='train for ... episodes')
+@click.option('-ne', '--num_episodes', default=1001, type=click.INT, help='train for ... episodes')
 @click.option('-ec', '--eval_cycle', default=10, type=click.INT, help='evaluate every ... episodes')
 @click.option('-ne', '--num_eval_episodes', default=1, type=click.INT, help='evaluate this many epochs')
 @click.option('-K', '--number_replays', default=1, type=click.INT)
@@ -275,7 +275,7 @@ def state_preprocessing(state, normalize=True):
 @click.option('-al', '--algorithm', default='DDQN', type=click.Choice(['DQN', 'DDQN']))
 @click.option('-mo', '--model', default='DeepQNetwork', type=click.Choice(['Resnet', 'Lenet', 'DeepQNetwork']))
 @click.option('-su', '--render_training', default=True, type=click.BOOL)
-@click.option('-mt', '--max_timesteps', default=100, type=click.INT)
+@click.option('-mt', '--max_timesteps', default=500, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=False, type=click.BOOL)
 @click.option('-es', '--epsilon_schedule', default=False, type=click.BOOL)
@@ -287,16 +287,17 @@ def state_preprocessing(state, normalize=True):
 @click.option('-i', '--intrinsic', default=True, type=click.BOOL)
 @click.option('-e', '--extrinsic', default=False, type=click.BOOL)
 @click.option('-s', '--seed', default=0, type=click.INT)
+@click.option('-grid', '--env_grid', default=100, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
          max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size,
-         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed):
+         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed, env_grid):
     # Set seed
     torch.manual_seed(seed)
 
     # launch stuff inside
     # virtual display here
-    grid_size = 16
+    grid_size = env_grid
     env = gym_minigrid.envs.EmptyEnv(size=grid_size)
     num_actions = 3
 
@@ -321,7 +322,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     state_encoder = Encoder(history_length=history_length + 1).to(device)
     # Intrinsic reward networks
 
-    dummy_input = torch.zeros(1, state_dim[0], state_dim[1], state_dim[2])
+    dummy_input = torch.zeros(1, state_dim[0], state_dim[1], state_dim[2]).to(device)
     out_cnn = state_encoder(dummy_input)
     out_cnn = out_cnn.view(out_cnn.size(0), -1)
     cnn_out_size = out_cnn.shape[1]
@@ -341,7 +342,6 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                      multi_step_size=multi_step_size, non_uniform_sampling=non_uniform_sampling,
                      epsilon_schedule=epsilon_schedule, mu=mu_intrinsic, beta=beta_intrinsic,
                      lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic, extrinsic=extrinsic)
-
 
     for _ in range(1):
         # Create experiment directory with run configuration
