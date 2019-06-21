@@ -73,7 +73,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     # env = retro.make(game='SpaceInvaders-Atari2600')
     # env = retro.make(game='BreakOut-Atari2600')
 
-    env = retro.make(game='SuperMarioBros-Nes')
+    env = retro.make(game='SuperMarioBros-Nes',  use_restricted_actions=retro.Actions.DISCRETE)
     # env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
 
     num_actions = env.action_space.n

@@ -32,18 +32,16 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     image_hist.extend([state] * (history_length + 1))
     state = np.array(image_hist).reshape([history_length + 1, 42, 42])
 
-    possible_actions = np.array(np.identity(env.action_space.n, dtype=int).tolist())
     loss, td_loss, L_I, L_F = 0, 0, 0, 0
     while True:
         # get action_id from agent
         # Hint: adapt the probabilities of the 5 actions for random sampling so that the agent explores properly.
         action_id = agent.act(state=state, deterministic=deterministic)
-        action = possible_actions[action_id]
 
         # Hint: frame skipping might help you to get better results.
         reward = 0
         for _ in range(skip_frames + 1):
-            next_state, r, terminal, info = env.step(action)
+            next_state, r, terminal, info = env.step(action_id)
             reward += r
 
             if rendering:
