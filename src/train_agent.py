@@ -23,6 +23,9 @@ import click
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 envs = ['VizDoom', 'Mario', 'GridWorld']
+maps = {
+    envs[0]: ['my_way_home_org', 'my_way_home_spwnhard', 'my_way_home_spwnhard_nogoal']
+}
 
 
 @click.command()
@@ -43,6 +46,7 @@ envs = ['VizDoom', 'Mario', 'GridWorld']
 @click.option('-al', '--algorithm', default='DDQN', type=click.Choice(['DQN', 'DDQN']))
 @click.option('-mo', '--model', default='DeepQNetwork', type=click.Choice(['Resnet', 'Lenet', 'DeepQNetwork']))
 @click.option('-env', '--environment', default=envs[0], type=click.Choice(envs))
+@click.option('-mp', '--map', default=maps[envs[0]][0], type=click.Choice(maps[envs[0]]))
 @click.option('-su', '--render_training', default=False, type=click.BOOL)
 @click.option('-mt', '--max_timesteps', default=5000, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
@@ -64,7 +68,7 @@ envs = ['VizDoom', 'Mario', 'GridWorld']
 @click.option('-s', '--seed', default=0, type=click.INT)
 @click.option('-pre_icm', '--pre_intrinsic', default=False, type=click.BOOL)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
-         epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, environment, render_training,
+         epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, environment, map, render_training,
          max_timesteps, normalize_images, non_uniform_sampling, multi_step, multi_step_size, mu_intrinsic,
          beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, update_q_target, epsilon_schedule, epsilon_start,
          epsilon_end, epsilon_decay, virtual_display, seed, pre_intrinsic):
@@ -81,12 +85,11 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     # env = retro.make(game='SuperMarioBros-Nes', use_restricted_actions=retro.Actions.DISCRETE)
     # env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
     if environment == envs[0]:
-        env = DoomEnv(map_name='my_way_home_org', render=render_training)
+        env = DoomEnv(map_name=map, render=render_training)
     else:
         if virtual_display:
             if render_training:
-                print(
-                    'On the tfpool computers this will probably not work together. Better deactivate render training when using the virtual display.')
+                print('On the tfpool computers this will probably not work together. Better deactivate render training when using the virtual display.')
             from pyvirtualdisplay import Display
             display = Display(visible=0, size=(224, 240))
             display.start()
