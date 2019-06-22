@@ -9,6 +9,7 @@ from src.agent.dqn_agent import DQNAgent
 from src.agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork, InverseModel, ForwardModel, Encoder
 from src.agent.intrinsic_reward import IntrinsicRewardGenerator
 from src.training import train_online
+from vizdoom_env.vizdoom_env import DoomEnv
 
 import retro
 
@@ -20,6 +21,8 @@ from utils.utils import *
 import click
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+envs = ['VizDoom', 'Mario', 'GridWorld']
 
 
 @click.command()
@@ -39,6 +42,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 @click.option('-lf', '--loss_function', default='L2', type=click.Choice(['L1', 'L2']))
 @click.option('-al', '--algorithm', default='DDQN', type=click.Choice(['DQN', 'DDQN']))
 @click.option('-mo', '--model', default='DeepQNetwork', type=click.Choice(['Resnet', 'Lenet', 'DeepQNetwork']))
+@click.option('-env', '--environment', default=envs[0], type=click.Choice(envs))
 @click.option('-su', '--render_training', default=False, type=click.BOOL)
 @click.option('-mt', '--max_timesteps', default=5000, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
@@ -60,7 +64,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 @click.option('-s', '--seed', default=0, type=click.INT)
 @click.option('-pre_icm', '--pre_intrinsic', default=False, type=click.BOOL)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
-         epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
+         epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, environment, render_training,
          max_timesteps, normalize_images, non_uniform_sampling, multi_step, multi_step_size, mu_intrinsic,
          beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, update_q_target, epsilon_schedule, epsilon_start,
          epsilon_end, epsilon_decay, virtual_display, seed, pre_intrinsic):
@@ -71,19 +75,26 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                                             args_for_filename=['algorithm', 'loss_function', 'num_episodes',
                                                                'number_replays'])
 
-    if virtual_display:
-        if render_training:
-            print('On the tfpool computers this will probably not work together. Better deactivate render training when using the virtual display.')
-        from pyvirtualdisplay import Display
-        display = Display(visible=0, size=(224, 240))
-        display.start()
-
     # env = retro.make(game='MontezumaRevenge-Atari2600')
     # env = retro.make(game='SpaceInvaders-Atari2600')
     # env = retro.make(game='BreakOut-Atari2600',  use_restricted_actions=retro.Actions.DISCRETE)
-
-    env = retro.make(game='SuperMarioBros-Nes', use_restricted_actions=retro.Actions.DISCRETE)
+    # env = retro.make(game='SuperMarioBros-Nes', use_restricted_actions=retro.Actions.DISCRETE)
     # env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
+    if environment == envs[0]:
+        env = DoomEnv(map_name='my_way_home_org', render=render_training)
+    else:
+        if virtual_display:
+            if render_training:
+                print(
+                    'On the tfpool computers this will probably not work together. Better deactivate render training when using the virtual display.')
+            from pyvirtualdisplay import Display
+            display = Display(visible=0, size=(224, 240))
+            display.start()
+        if environment == envs[1]:
+            env = retro.make(game='SuperMarioBros-Nes', use_restricted_actions=retro.Actions.DISCRETE)
+        else:
+            raise NotImplementedError()
+
 
     num_actions = env.action_space.n
 

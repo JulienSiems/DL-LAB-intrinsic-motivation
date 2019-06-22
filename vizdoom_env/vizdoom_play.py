@@ -1,16 +1,12 @@
 from __future__ import print_function
 
 import argparse
-from pyglet.window import key
-import gym
 import numpy as np
 import pickle
 import os
 from datetime import datetime
 import gzip
 import json
-import time
-
 import vizdoom_env as vsd
 
 DOOM_MAPS = [
@@ -68,9 +64,8 @@ if __name__ == "__main__":
         "terminal" : [],
     }
 
-    env = vsd.DoomEnv(map_name=DOOM_MAPS[1], set_window_visible=True, play=True)
-    env.reset()
-    a = 0
+    env = vsd.DoomEnv(map_name=DOOM_MAPS[1], render=True, play=True)
+    a = env.num_actions
     episode_rewards = []
     steps = 0
     while True:
@@ -82,7 +77,6 @@ if __name__ == "__main__":
         rewards = []
         terminals = []
         while True:
-
             next_state, r, done, info = env.step(a)
             episode_reward += r
             a = env.current_action()
@@ -99,6 +93,7 @@ if __name__ == "__main__":
             if done:
                 print('Next episode')
                 break
+
 
 
     env.close()
