@@ -20,7 +20,7 @@ class IntrinsicRewardGenerator:
         action_one_hot = torch.nn.functional.one_hot(action.long(), num_classes=self.num_actions)
         phi_s_tp1_pred = self.forward_dynamics_model(phi_s_t, action_one_hot.float())
 
-        L_I = torch.nn.NLLLoss()(torch.nn.functional.softmax(action_pred, dim=1), action.long())  # (eq. 3)
+        L_I = torch.nn.CrossEntropyLoss()(action_pred, action.long())  # (eq. 3)
         r_i = 0.5 * ((phi_s_tp1 - phi_s_tp1_pred) ** 2).sum(dim=1)  # (eq. 6)
         L_F = r_i.mean()  # (eq. 5)
         return L_I, L_F, r_i

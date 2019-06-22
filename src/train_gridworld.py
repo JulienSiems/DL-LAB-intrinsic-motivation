@@ -302,12 +302,12 @@ def state_preprocessing(state, normalize=True):
 @click.option('-mu', '--mu_intrinsic', default=5, type=click.FLOAT)
 @click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
-@click.option('-i', '--intrinsic', default=False, type=click.BOOL)
+@click.option('-i', '--intrinsic', default=True, type=click.BOOL)
 @click.option('-e', '--extrinsic', default=False, type=click.BOOL)
 @click.option('-s', '--seed', default=0, type=click.INT)
 @click.option('-grid', '--env_grid', default=16, type=click.INT)
 @click.option('-pre_icm', '--pre_intrinsic', default=False, type=click.BOOL)
-@click.option('-d', '--debug', default=True, type=click.BOOL)
+@click.option('-d', '--debug', default=False, type=click.BOOL)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
          max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size,
