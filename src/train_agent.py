@@ -10,6 +10,8 @@ from src.agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork, Invers
 from src.agent.intrinsic_reward import IntrinsicRewardGenerator
 from src.training import train_online
 from vizdoom_env.vizdoom_env import DoomEnv
+import gym_minigrid
+from src.train_gridworld import ClassicalGridworldWrapper
 
 import retro
 
@@ -95,6 +97,10 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
             display.start()
         if environment == envs[1]:
             env = retro.make(game='SuperMarioBros-Nes', use_restricted_actions=retro.Actions.DISCRETE)
+        elif environment == envs[2]:
+            grid_size = 100
+            env = gym_minigrid.envs.EmptyEnv(size=grid_size)
+            env = ClassicalGridworldWrapper(env)
         else:
             raise NotImplementedError()
 

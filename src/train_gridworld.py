@@ -88,6 +88,7 @@ class ClassicalGridworldWrapper(gym.Wrapper):
 
     def __init__(self, env=None):
         super(ClassicalGridworldWrapper, self).__init__(env)
+        self.action_space = gym.spaces.Discrete(4)
 
     def step(self, action):
         reward = 0
@@ -100,10 +101,11 @@ class ClassicalGridworldWrapper(gym.Wrapper):
             reward += r
             if terminal:
                 break
-        return next_state, r, terminal, info
+        return next_state['image'], r, terminal, info
 
     def reset(self):
-        return self.env.reset()
+        r = self.env.reset()
+        return r['image']
 
 
 def run_episode(env, agent, deterministic, history_length, skip_frames, max_timesteps, normalize_images,
