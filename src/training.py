@@ -47,7 +47,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             if terminal:
                 # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
                 agent.n_step_buffer = []
-                return loss, td_loss, L_I, L_F
+                return stats, loss, td_loss, L_I, L_F
 
             if rendering:
                 env.render()
