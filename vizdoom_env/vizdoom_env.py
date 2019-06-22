@@ -61,9 +61,9 @@ class DoomEnv(gym.Env):
         return observation
 
     def step(self, action, action_repetition=1):
-        if isinstance(action, np.ndarray):
+        if isinstance(action, np.ndarray) and action.size == self.num_actions:
             action = action.tolist()
-        elif isinstance(action, int):
+        else:
             action = self._action2hot(action)
 
         reward = self.game.make_action(action, action_repetition)
