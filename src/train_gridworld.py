@@ -22,7 +22,11 @@ from scipy.stats import wasserstein_distance
 from datetime import datetime
 import cv2
 from enum import IntEnum
+import random
+from src.agent.networks import DeepQNetwork, InverseModel, ForwardModel, Encoder
+from src.agent.intrinsic_reward import IntrinsicRewardGenerator
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def arr_to_sig(arr):
     """Convert a 2D array to a signature for cv2.EMD"""
@@ -135,6 +139,7 @@ def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rend
     h_state = np.array(history_buffer)
     # state = np.expand_dims(np.squeeze(np.squeeze(h_state, axis=2), axis=1), axis=0)
     state = h_state
+    state = np.array(state).reshape([history_length, env.height, env.width])
 
     visitation_map[env.agent_pos[0], env.agent_pos[1]] += 1
 
@@ -163,6 +168,7 @@ def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rend
             h_state = np.array(history_buffer)
             # next_state = np.expand_dims(np.squeeze(np.squeeze(h_state, axis=2), axis=1), axis=0)
             next_state = h_state
+            next_state = np.array(next_state).reshape([history_length, env.height, env.width])
 
             if do_training:
                 visitation_map[env.agent_pos[0], env.agent_pos[1]] += 1
@@ -189,6 +195,7 @@ def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rend
             loss = agent.train(state, action_id, next_state, reward, terminal)
 
         stats.step(reward, action_id, loss)
+        print(step, reward, action_id, sum(sum(visitation_map)))
 
         state = next_state
 
@@ -312,7 +319,7 @@ def train_online(env,
             eval_rewards = []
             for j in range(num_eval_episodes):
                 stats = run_episode(env, agent, deterministic=True, do_training=False, rendering=True,
-                                    history_length=history_length, max_timesteps=val_max_time_step)
+                                    history_length=history_length, max_timesteps=5)
                 eval_rewards.append(stats.episode_reward)
             mean_reward = sum(eval_rewards) / num_eval_episodes
             tensorboard.add_scalar("Evaluation/Mean Eval Reward", mean_reward, i + 1)
@@ -340,6 +347,9 @@ def state_preprocessing(state):
 
 
 if __name__ == "__main__":
+    torch.manual_seed(0)
+    random.seed(0)
+    np.random.seed(0)
 
     grid_size = 16
     env = gym_minigrid.envs.EmptyEnv(size=grid_size)
@@ -353,10 +363,10 @@ if __name__ == "__main__":
     state_dim = (history_length, grid_size, grid_size)
     action_distribution = None
     replay_buffer_size = 3e4
-    use_icm = True
+    use_icm = False
     use_extrinsic_reward = False
     agent_policy = 'e_greedy'
-    icm_eta = 0.2
+    icm_eta = 5
 
     if torch.cuda.is_available():
         batch_size = 32
@@ -370,14 +380,36 @@ if __name__ == "__main__":
         num_episodes = 51
         num_eval_episodes = 1
         eval_cycle = 10
-        val_max_time_step = 50
+        val_max_time_step = 100
         debug_flag = False
 
     # Define Q network, target network and DQN agent
-    qnet = ICMModel(in_shape=state_dim, n_classes=num_actions)
-    qtarget = ICMModel(in_shape=state_dim, n_classes=num_actions)
-    agent = DQNAgent(Q=qnet, Q_target=qtarget, num_actions=num_actions, gamma=0.95, batch_size=batch_size, epsilon=0.1,
-                     tau=0.001, lr=1e-3, state_dim=state_dim, do_training=True,
+    # qnet = ICMModel(in_shape=state_dim, n_classes=num_actions)
+    # qtarget = ICMModel(in_shape=state_dim, n_classes=num_actions)
+    CNN = DeepQNetwork
+    Q_net = CNN(in_dim=state_dim, num_actions=num_actions, history_length=history_length).to(device)
+    Q_target_net = CNN(in_dim=state_dim, num_actions=num_actions, history_length=history_length).to(device)
+
+    state_encoder = Encoder(history_length=history_length).to(device)
+    # Intrinsic reward networks
+
+    dummy_input = torch.zeros(1, state_dim[0], state_dim[1], state_dim[2]).to(device)
+    out_cnn = state_encoder(dummy_input)
+    out_cnn = out_cnn.view(out_cnn.size(0), -1)
+    cnn_out_size = out_cnn.shape[1]
+
+    inverse_dynamics_model = InverseModel(num_actions=num_actions, input_dimension=cnn_out_size * 2).to(device)
+    forward_dynamics_model = ForwardModel(num_actions=num_actions, dim_s=cnn_out_size,
+                                          output_dimension=cnn_out_size).to(device)
+
+    intrinsic_reward_network = IntrinsicRewardGenerator(state_encoder=state_encoder,
+                                                        inverse_dynamics_model=inverse_dynamics_model,
+                                                        forward_dynamics_model=forward_dynamics_model,
+                                                        num_actions=num_actions)
+
+
+    agent = DQNAgent(Q=Q_net, Q_target=Q_target_net, intrinsic_reward_generator=intrinsic_reward_network, num_actions=num_actions, gamma=0.95, batch_size=batch_size, epsilon=0.1,
+                     tau=0.01, lr=1e-3, state_dim=state_dim, do_training=True,
                      replay_buffer_size=replay_buffer_size, act_dist=action_distribution, use_icm=use_icm,
                      use_extrinsic_reward=use_extrinsic_reward, policy=agent_policy, icm_eta=icm_eta)
 
