@@ -18,7 +18,7 @@ class DQNAgent:
     def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, intrinsic, extrinsic,
                  mu, beta, lambda_intrinsic, multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95,
                  batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, number_replays=10, loss_function='L1',
-                 soft_update=False, algorithm='DQN', epsilon_schedule=False, pre_intrinsic=True, **kwargs):
+                 soft_update=False, algorithm='DQN', epsilon_schedule=False, pre_intrinsic=False, **kwargs):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -42,6 +42,15 @@ class DQNAgent:
         # intrinsic reward generator
         self.intrinsic_reward_generator = intrinsic_reward_generator
 
+        nets = [self.Q, 
+                self.intrinsic_reward_generator.state_encoder,
+                self.intrinsic_reward_generator.inverse_dynamics_model,
+                self.intrinsic_reward_generator.forward_dynamics_model]
+        parameters = set()
+        for net in nets:
+            parameters |= set(net.parameters())
+        self.optimizer = torch.optim.Adam(parameters, lr=lr)
+
         # define replay buffer
         self.replay_buffer = ReplayBuffer(capacity=capacity)
 
@@ -58,7 +67,6 @@ class DQNAgent:
         self.pre_intrinsic = pre_intrinsic
 
         self.number_replays = number_replays
-        self.optimizer = torch.optim.Adam(self.Q.parameters(), lr=lr)
         self.num_actions = num_actions
         self.steps_done = 0
         self.soft_update = soft_update
@@ -175,7 +183,6 @@ class DQNAgent:
                 loss = self.lambda_intrinsic * td_loss + (1 - self.beta) * L_I + self.beta * L_F
             else:
                 loss = td_loss
-            print(loss)
             loss.backward()
             self.optimizer.step()
 

@@ -186,7 +186,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             agent.train()
 
         stats.step(reward, action_id)
-        print(step, reward, action_id, sum(sum(visitation_map)))
+        # print(step, reward, action_id, sum(sum(visitation_map)))
 
         state = next_state
 
@@ -250,7 +250,6 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             # plt.savefig(os.path.join(writer.logdir, 'visit_map_' + str(i) + '.png'), bbox_inches="tight")
             # plt.clf()
             print('exploration coverage: {}     dist: {}'.format(coverage, dist))
-            agent.Q.eval()
             stats = []
             for j in range(num_eval_episodes):
                 stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=5,
@@ -262,7 +261,6 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             print('Replay buffer length', len(agent.replay_buffer._data))
             writer.add_scalar('val_episode_reward_mean', episode_reward_mean, global_step=i)
             writer.add_scalar('val_episode_reward_std', episode_reward_std, global_step=i)
-            agent.Q.train()
         # store model.
         if i % eval_cycle == 0 or i >= (num_episodes - 1):
             model_dir = agent.save(os.path.join(writer.logdir, "agent.pt"))
@@ -309,15 +307,17 @@ def state_preprocessing(state, normalize=True):
 @click.option('-s', '--seed', default=0, type=click.INT)
 @click.option('-grid', '--env_grid', default=16, type=click.INT)
 @click.option('-pre_icm', '--pre_intrinsic', default=False, type=click.BOOL)
+@click.option('-d', '--debug', default=True, type=click.BOOL)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
          max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size,
-         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed, env_grid, pre_intrinsic):
-    # Set seed
-    torch.manual_seed(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-
+         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed, env_grid, pre_intrinsic, debug):
+    if debug:
+        # Set seed
+        torch.manual_seed(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+    
     # launch stuff inside
     # virtual display here
     grid_size = env_grid
@@ -364,7 +364,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                      soft_update=soft_update, algorithm=algorithm, multi_step=multi_step,
                      multi_step_size=multi_step_size, non_uniform_sampling=non_uniform_sampling,
                      epsilon_schedule=epsilon_schedule, mu=mu_intrinsic, beta=beta_intrinsic,
-                     lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic, extrinsic=extrinsic)
+                     lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic, extrinsic=extrinsic, pre_intrinsic=pre_intrinsic)
 
     for _ in range(1):
         # Create experiment directory with run configuration
