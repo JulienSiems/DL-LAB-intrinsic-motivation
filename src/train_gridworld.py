@@ -195,7 +195,7 @@ def run_episode(env, agent, deterministic, skip_frames=0, do_training=True, rend
             loss = agent.train(state, action_id, next_state, reward, terminal)
 
         stats.step(reward, action_id, loss)
-        print(step, reward, action_id, sum(sum(visitation_map)))
+        # print(step, reward, action_id, sum(sum(visitation_map)))
 
         state = next_state
 
@@ -308,12 +308,12 @@ def train_online(env,
             checkpoint_data['exploration_goal_reached'].append(visitation_map[-2, -2])
             checkpoint_data['exploration_max_freq'].append(visitation_map.max())
             checkpoint_data['exploration_coverage'].append(coverage)
-            plt.figure(figsize=(20, 20))
-            sns.heatmap(np.transpose(visitation_map), annot=True, linewidths=.5, square=True)
-
-            plt.title('EM Distance '+str(dist))
-            plt.savefig(os.path.join(save_dir, 'visit_map_'+str(i)+'.png'), bbox_inches="tight")
-            plt.clf()
+            # plt.figure(figsize=(20, 20))
+            # sns.heatmap(np.transpose(visitation_map), annot=True, linewidths=.5, square=True)
+            #
+            # plt.title('EM Distance '+str(dist))
+            # plt.savefig(os.path.join(save_dir, 'visit_map_'+str(i)+'.png'), bbox_inches="tight")
+            # plt.clf()
             print('exploration coverage: {}     dist: {}'.format(coverage, dist))
 
             eval_rewards = []

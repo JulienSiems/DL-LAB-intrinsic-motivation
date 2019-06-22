@@ -76,7 +76,14 @@ class DQNAgent:
         # self.inverse_loss_fun = torch.nn.CrossEntropyLoss()
         self.inverse_loss_fun = torch.nn.NLLLoss()
 
-        self.optimizer = torch.optim.Adam(self.Q.parameters(), lr=lr)
+        nets = [self.Q,
+                self.intrinsic_reward_generator.state_encoder,
+                self.intrinsic_reward_generator.inverse_dynamics_model,
+                self.intrinsic_reward_generator.forward_dynamics_model]
+        parameters = set()
+        for net in nets:
+            parameters |= set(net.parameters())
+        self.optimizer = torch.optim.Adam(parameters, lr=lr)
 
         self.num_actions = num_actions
 
@@ -162,7 +169,7 @@ class DQNAgent:
         else:
             loss = policy_loss
             # print(policy_loss.item(), 0, 0, loss.item())
-        print(loss)
+        # print(loss)
         loss.backward()
         self.optimizer.step()
 
@@ -181,13 +188,7 @@ class DQNAgent:
         Returns:
             action id
         """
-        if deterministic:
-            r = 1
-        elif self.policy == 'random':
-            r = 0
-        else:
-            r = np.random.uniform()
-
+        r = np.random.uniform()
         sample = random.random()
 
         if deterministic or sample > self.epsilon:
