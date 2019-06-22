@@ -21,6 +21,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from gym import wrappers
+import random
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -135,6 +136,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     state = np.array(image_hist).reshape([history_length + 1, env.height, env.width])
     frame[0, env.agent_pos[0], env.agent_pos[1]] = 0
 
+    visitation_map[env.agent_pos[0], env.agent_pos[1]] += 1
+
     while True:
         # get action_id from agent
         # Hint: adapt the probabilities of the 5 actions for random sampling so that the agent explores properly.
@@ -146,6 +149,9 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         for _ in range(skip_frames + 1):
             next_state, r, terminal, info = env.step(action_id)
             terminal = False
+
+            if do_training:
+                visitation_map[env.agent_pos[0], env.agent_pos[1]] += 1
 
             reward += r
 
@@ -175,12 +181,12 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             reward += intrinsic_reward.item()
 
         if do_training:
-            visitation_map[env.agent_pos[0], env.agent_pos[1]] += 1
             agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
                                    terminal=terminal)
             agent.train()
 
         stats.step(reward, action_id)
+        print(step, reward, action_id, sum(sum(visitation_map)))
 
         state = next_state
 
@@ -194,7 +200,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     print('epsilon_threshold', agent.eps_threshold)
 
     # Update the target network
-    if not soft_update:
+    if not soft_update and do_training:
         agent.Q_target.load_state_dict(agent.Q.state_dict())
 
     return stats
@@ -244,10 +250,10 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             # plt.savefig(os.path.join(writer.logdir, 'visit_map_' + str(i) + '.png'), bbox_inches="tight")
             # plt.clf()
             print('exploration coverage: {}     dist: {}'.format(coverage, dist))
-
+            agent.Q.eval()
             stats = []
             for j in range(num_eval_episodes):
-                stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=1000,
+                stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=5,
                                          history_length=history_length, skip_frames=skip_frames,
                                          normalize_images=normalize_images))
             stats_agg = [stat.episode_reward for stat in stats]
@@ -256,7 +262,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             print('Replay buffer length', len(agent.replay_buffer._data))
             writer.add_scalar('val_episode_reward_mean', episode_reward_mean, global_step=i)
             writer.add_scalar('val_episode_reward_std', episode_reward_std, global_step=i)
-
+            agent.Q.train()
         # store model.
         if i % eval_cycle == 0 or i >= (num_episodes - 1):
             model_dir = agent.save(os.path.join(writer.logdir, "agent.pt"))
@@ -289,7 +295,7 @@ def state_preprocessing(state, normalize=True):
 @click.option('-al', '--algorithm', default='DDQN', type=click.Choice(['DQN', 'DDQN']))
 @click.option('-mo', '--model', default='DeepQNetwork', type=click.Choice(['Resnet', 'Lenet', 'DeepQNetwork']))
 @click.option('-su', '--render_training', default=True, type=click.BOOL)
-@click.option('-mt', '--max_timesteps', default=500, type=click.INT)
+@click.option('-mt', '--max_timesteps', default=100, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=False, type=click.BOOL)
 @click.option('-es', '--epsilon_schedule', default=False, type=click.BOOL)
@@ -298,17 +304,19 @@ def state_preprocessing(state, normalize=True):
 @click.option('-mu', '--mu_intrinsic', default=5, type=click.FLOAT)
 @click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
-@click.option('-i', '--intrinsic', default=True, type=click.BOOL)
+@click.option('-i', '--intrinsic', default=False, type=click.BOOL)
 @click.option('-e', '--extrinsic', default=False, type=click.BOOL)
 @click.option('-s', '--seed', default=0, type=click.INT)
-@click.option('-grid', '--env_grid', default=100, type=click.INT)
-@click.option('-pre_icm', '--pre_intrinsic', default=True, type=click.BOOL)
+@click.option('-grid', '--env_grid', default=16, type=click.INT)
+@click.option('-pre_icm', '--pre_intrinsic', default=False, type=click.BOOL)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
          max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size,
          mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed, env_grid, pre_intrinsic):
     # Set seed
     torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
 
     # launch stuff inside
     # virtual display here

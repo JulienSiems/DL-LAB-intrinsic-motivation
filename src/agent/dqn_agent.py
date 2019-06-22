@@ -37,6 +37,7 @@ class DQNAgent:
         self.Q = Q
         self.Q_target = Q_target
         self.Q_target.load_state_dict(self.Q.state_dict())
+        self.Q_target.eval()
 
         # intrinsic reward generator
         self.intrinsic_reward_generator = intrinsic_reward_generator
@@ -163,12 +164,18 @@ class DQNAgent:
 
             # Choose the action previously taken
             q_pick = torch.gather(state_action_values, dim=1, index=batch_actions_tensor.long())
+            q_pick = q_pick.view(-1)
             # Chosen like in this tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
             self.optimizer.zero_grad()
             # print(L_I.item(), L_F.item())
             # td_loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
             td_loss = (q_pick-td_target.detach()).pow(2).mean()
-            loss = self.lambda_intrinsic * td_loss + (1 - self.beta) * L_I + self.beta * L_F
+
+            if self.intrinsic:
+                loss = self.lambda_intrinsic * td_loss + (1 - self.beta) * L_I + self.beta * L_F
+            else:
+                loss = td_loss
+            print(loss)
             loss.backward()
             self.optimizer.step()
 
