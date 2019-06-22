@@ -30,21 +30,24 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     # append image history to first state
     state = state_preprocessing(state, normalize=normalize_images)
     image_hist.extend([state] * (history_length + 1))
-    state = np.array(image_hist).reshape([history_length + 1, 42, 42])
+    state = np.array(image_hist).reshape([history_length + 1, 84, 84])
 
-    possible_actions = np.array(np.identity(env.action_space.n, dtype=int).tolist())
     loss, td_loss, L_I, L_F = 0, 0, 0, 0
     while True:
         # get action_id from agent
         # Hint: adapt the probabilities of the 5 actions for random sampling so that the agent explores properly.
         action_id = agent.act(state=state, deterministic=deterministic)
-        action = possible_actions[action_id]
 
         # Hint: frame skipping might help you to get better results.
         reward = 0
         for _ in range(skip_frames + 1):
-            next_state, r, terminal, info = env.step(action)
+            next_state, r, terminal, info = env.step(action_id)
             reward += r
+
+            if terminal:
+                # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
+                agent.n_step_buffer = []
+                return stats, loss, td_loss, L_I, L_F
 
             if rendering:
                 env.render()
@@ -55,12 +58,18 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         next_state = state_preprocessing(next_state)
         image_hist.append(next_state)
         image_hist.pop(0)
-        next_state = np.array(image_hist).reshape([history_length + 1, 42, 42])
+        next_state = np.array(image_hist).reshape([history_length + 1, 84, 84])
 
         if do_training:
             agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
                                    terminal=terminal)
             loss, td_loss, L_I, L_F = agent.train()
+
+            # Update the target network
+            if not soft_update and agent.steps_done % agent.update_q_target == 0:
+                print('Updating Q_target')
+                agent.Q_target.load_state_dict(agent.Q.state_dict())
+
             if step % 100 == 0:
                 print('Loss', loss)
 
@@ -70,16 +79,12 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
         if terminal or (step * (skip_frames + 1)) > max_timesteps:  # or stats.episode_reward < -20:
             if agent.multi_step:
-                # Finish n step buffer
-                agent.finish_n_step()
+                # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
+                agent.n_step_buffer = []
             break
         step += 1
 
     print('epsilon_threshold', agent.eps_threshold)
-
-    # Update the target network
-    if not soft_update:
-        agent.Q_target.load_state_dict(agent.Q.state_dict())
 
     return stats, loss, td_loss, L_I, L_F
 
@@ -103,7 +108,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         writer.add_scalar('train_l_f', L_F, global_step=i)
         writer.add_scalar('train_episode_reward', stats.episode_reward, global_step=i)
         for action in range(env.action_space.n):
-            writer.add_scalar('train_{}'.format(env.buttons[action]), stats.get_action_usage(action), global_step=i)
+            writer.add_scalar('train_{}'.format(action), stats.get_action_usage(action), global_step=i)
 
         # EVALUATION
         # check its performance with greedy actions only. You can also use tensorboard to plot the mean episode reward.
@@ -127,7 +132,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
 
 
 def state_preprocessing(state, normalize=True):
-    image_resized = Image.fromarray(state).resize((42, 42), Image.ANTIALIAS)
+    image_resized = Image.fromarray(state).resize((84, 84), Image.ANTIALIAS)
     image_resized_bw = rgb2gray(np.array(image_resized))
     if normalize:
         image_resized_bw = image_resized_bw / 255.0

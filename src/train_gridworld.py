@@ -293,10 +293,9 @@ def state_preprocessing(state, normalize=True):
 @click.option('-al', '--algorithm', default='DDQN', type=click.Choice(['DQN', 'DDQN']))
 @click.option('-mo', '--model', default='DeepQNetwork', type=click.Choice(['Resnet', 'Lenet', 'DeepQNetwork']))
 @click.option('-su', '--render_training', default=True, type=click.BOOL)
-@click.option('-mt', '--max_timesteps', default=100, type=click.INT)
+@click.option('-mt', '--max_timesteps', default=500, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=False, type=click.BOOL)
-@click.option('-es', '--epsilon_schedule', default=False, type=click.BOOL)
 @click.option('-ms', '--multi_step', default=False, type=click.BOOL)
 @click.option('-mss', '--multi_step_size', default=3, type=click.INT)
 @click.option('-mu', '--mu_intrinsic', default=5, type=click.FLOAT)
@@ -305,13 +304,29 @@ def state_preprocessing(state, normalize=True):
 @click.option('-i', '--intrinsic', default=True, type=click.BOOL)
 @click.option('-e', '--extrinsic', default=False, type=click.BOOL)
 @click.option('-s', '--seed', default=0, type=click.INT)
-@click.option('-grid', '--env_grid', default=16, type=click.INT)
+@click.option('-grid', '--env_grid', default=100, type=click.INT)
 @click.option('-pre_icm', '--pre_intrinsic', default=False, type=click.BOOL)
 @click.option('-d', '--debug', default=False, type=click.BOOL)
+@click.option('-es', '--epsilon_schedule', default=False, type=click.BOOL)
+@click.option('-est', '--epsilon_start', default=0.9, type=click.FLOAT)
+@click.option('-end', '--epsilon_end', default=0.05, type=click.FLOAT)
+@click.option('-edc', '--epsilon_decay', default=30000, type=click.INT)
+@click.option('-vdy', '--virtual_display', default=False, type=click.BOOL)
+@click.option('-uq', '--update_q_target', default=1000, type=click.INT,
+              help='How many steps to pass between each q_target update')
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, render_training,
          max_timesteps, normalize_images, non_uniform_sampling, epsilon_schedule, multi_step, multi_step_size,
-         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed, env_grid, pre_intrinsic, debug):
+         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, seed, env_grid, pre_intrinsic, debug,
+         epsilon_start, epsilon_end, epsilon_decay, virtual_display, update_q_target):
+
+    if virtual_display:
+        if render_training:
+            print('On the tfpool computers this will probably not work together. Better deactivate render training when using the virtual display.')
+        from pyvirtualdisplay import Display
+        display = Display(visible=0, size=(224, 240))
+        display.start()
+
     if debug:
         # Set seed
         torch.manual_seed(seed)
@@ -364,7 +379,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                      soft_update=soft_update, algorithm=algorithm, multi_step=multi_step,
                      multi_step_size=multi_step_size, non_uniform_sampling=non_uniform_sampling,
                      epsilon_schedule=epsilon_schedule, mu=mu_intrinsic, beta=beta_intrinsic,
-                     lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic, extrinsic=extrinsic, pre_intrinsic=pre_intrinsic)
+                     lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic, extrinsic=extrinsic, pre_intrinsic=pre_intrinsic,
+                     update_q_target=update_q_target, epsilon_start=epsilon_start, epsilon_end=epsilon_end, epsilon_decay=epsilon_decay)
 
     for _ in range(1):
         # Create experiment directory with run configuration

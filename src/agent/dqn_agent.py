@@ -16,9 +16,10 @@ def soft_update(target, source, tau):
 class DQNAgent:
 
     def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, intrinsic, extrinsic,
-                 mu, beta, lambda_intrinsic, multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95,
-                 batch_size=64, epsilon=0.1, tau=0.01, lr=1e-4, number_replays=10, loss_function='L1',
-                 soft_update=False, algorithm='DQN', epsilon_schedule=False, pre_intrinsic=False, **kwargs):
+                 mu, beta, lambda_intrinsic, epsilon_start, epsilon_end, epsilon_decay, update_q_target,
+                 multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95, batch_size=64, epsilon=0.1,
+                 tau=0.01, lr=1e-4, number_replays=10, loss_function='L1', soft_update=False, algorithm='DQN',
+                 epsilon_schedule=False, pre_intrinsic=False, **kwargs):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -75,6 +76,10 @@ class DQNAgent:
         self.algorithm = algorithm
 
         self.epsilon_schedule = epsilon_schedule
+        self.epsilon_start = epsilon_start
+        self.epsilon_end = epsilon_end
+        self.epsilon_decay = epsilon_decay
+        self.update_q_target = update_q_target
         self.n_step_buffer = []
         self.n_steps = multi_step_size
         self.multi_step = multi_step
@@ -177,7 +182,7 @@ class DQNAgent:
             self.optimizer.zero_grad()
             # print(L_I.item(), L_F.item())
             # td_loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
-            td_loss = (q_pick-td_target.detach()).pow(2).mean()
+            td_loss = (q_pick - td_target.detach()).pow(2).mean()
 
             if self.intrinsic:
                 loss = self.lambda_intrinsic * td_loss + (1 - self.beta) * L_I + self.beta * L_F
@@ -205,11 +210,8 @@ class DQNAgent:
 
         if self.epsilon_schedule:
             # Like in pytorch tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
-            EPS_START = 0.9
-            EPS_END = 0.05
-            EPS_DECAY = 30000
-            eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-                            np.exp(-1. * self.steps_done / EPS_DECAY)
+            eps_threshold = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * \
+                            np.exp(-1. * self.steps_done / self.epsilon_decay)
             self.steps_done += 1
         else:
             eps_threshold = self.epsilon
