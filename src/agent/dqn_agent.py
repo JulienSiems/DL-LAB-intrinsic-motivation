@@ -107,8 +107,7 @@ class DQNAgent:
         batch_rewards = torch.from_numpy(batch_rewards).float().to(self.device)
         batch_dones = torch.from_numpy(batch_dones.astype(int)).byte().to(self.device)
 
-        batch_actions = torch.zeros((batch_action_ids.shape[0], self.num_actions))
-        batch_actions[:, batch_action_ids] = 1.0
+        batch_actions = F.one_hot(batch_action_ids, num_classes=self.num_actions).float()
 
         self.set_train_mode()
         self.optimizer.zero_grad()

@@ -356,7 +356,7 @@ if __name__ == "__main__":
     use_icm = True
     use_extrinsic_reward = False
     agent_policy = 'e_greedy'
-    icm_eta = 0.2
+    icm_eta = 5
 
     if torch.cuda.is_available():
         batch_size = 32
