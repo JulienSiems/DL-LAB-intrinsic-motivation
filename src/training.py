@@ -32,6 +32,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     image_hist.extend([state] * (history_length + 1))
     state = np.array(image_hist).reshape([history_length + 1, 84, 84])
 
+    beginning = True
     loss, td_loss, L_I, L_F = 0, 0, 0, 0
     while True:
         # get action_id from agent
@@ -61,8 +62,9 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         next_state = np.array(image_hist).reshape([history_length + 1, 84, 84])
 
         if do_training:
+            # FIXME: Need priority for sample. This should just be the loss. Right now, it's just a placeholder.
             agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
-                                   terminal=terminal)
+                                   terminal=terminal, beginning=beginning, priority=1.0)
             loss, td_loss, L_I, L_F = agent.train()
 
             # Update the target network
@@ -83,6 +85,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
                 agent.n_step_buffer = []
             break
         step += 1
+        beginning = False
 
     print('epsilon_threshold', agent.eps_threshold)
 
@@ -121,7 +124,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             stats_agg = [stat.episode_reward for stat in stats]
             episode_reward_mean, episode_reward_std = np.mean(stats_agg), np.std(stats_agg)
             print('Validation {} +- {}'.format(episode_reward_mean, episode_reward_std))
-            print('Replay buffer length', len(agent.replay_buffer._data))
+            print('Replay buffer length', agent.replay_buffer.size)
             writer.add_scalar('val_episode_reward_mean', episode_reward_mean, global_step=i)
             writer.add_scalar('val_episode_reward_std', episode_reward_std, global_step=i)
 

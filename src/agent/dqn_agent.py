@@ -3,7 +3,7 @@ import random
 import numpy as np
 import torch
 
-from src.agent.replay_buffer import ReplayBuffer
+from src.agent.replay_buffer import UniformReplayBuffer, PrioritizedReplayBuffer
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -17,6 +17,7 @@ class DQNAgent:
 
     def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, intrinsic, extrinsic,
                  mu, beta, lambda_intrinsic, epsilon_start, epsilon_end, epsilon_decay, update_q_target,
+                 experience_replay, prio_er_alpha, prio_er_beta, state_dim,
                  multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95, batch_size=64, epsilon=0.1,
                  tau=0.01, lr=1e-4, number_replays=10, loss_function='L1', soft_update=False, algorithm='DQN',
                  epsilon_schedule=False, pre_intrinsic=False, **kwargs):
@@ -53,7 +54,19 @@ class DQNAgent:
         self.optimizer = torch.optim.Adam(parameters, lr=lr)
 
         # define replay buffer
-        self.replay_buffer = ReplayBuffer(capacity=capacity)
+        tmp_state_shape = tuple([1] + list(state_dim))
+        self.experience_replay = experience_replay
+        self.prio_er_alpha = prio_er_alpha
+        self.prio_er_beta = prio_er_beta
+        if experience_replay == 'Uniform':
+            self.replay_buffer = UniformReplayBuffer(capacity=capacity, state_shape=tmp_state_shape,
+                                                     state_store_dtype=np.float16, state_sample_dtype=np.float32)
+        elif experience_replay == 'Prioritized':
+            self.replay_buffer = PrioritizedReplayBuffer(capacity=capacity, state_shape=tmp_state_shape,
+                                                         state_store_dtype=np.float16, state_sample_dtype=np.float32,
+                                                         alpha=prio_er_alpha)
+        else:
+            raise ValueError('Unknown experience replay buffer type: {}'.format(experience_replay))
 
         # parameters
         self.batch_size = batch_size
@@ -92,7 +105,7 @@ class DQNAgent:
             raise ValueError('Loss function {} not implemented.'.format(loss_function))
 
     # Adapated from https://github.com/qfettes/DeepRL-Tutorials/blob/master/02.NStep_DQN.ipynb
-    def append_to_replay(self, state, action, next_state, reward, terminal):
+    def append_to_replay(self, state, action, next_state, reward, terminal, beginning, priority):
         if self.multi_step:
             self.n_step_buffer.append((state, action, next_state, reward))
 
@@ -102,9 +115,9 @@ class DQNAgent:
             R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(self.n_steps)])
             state, action, _, _ = self.n_step_buffer.pop(0)
 
-            self.replay_buffer.add_transition(state, action, next_state, R, terminal)
+            self.replay_buffer.add_transition(state, action, R, next_state, terminal, beginning, priority)
         else:
-            self.replay_buffer.add_transition(state, action, next_state, reward, terminal)
+            self.replay_buffer.add_transition(state, action, reward, next_state, terminal, beginning, priority)
 
     def finish_n_step(self):
         if self.multi_step:
@@ -112,20 +125,27 @@ class DQNAgent:
                 R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(len(self.n_step_buffer))])
                 state, action, next_state, _ = self.n_step_buffer.pop(0)
 
-                self.replay_buffer.add_transition(state, action, next_state, R, True)
+                # FIXME: what should priority be? can we always set beginning=False in this case?
+                self.replay_buffer.add_transition(state, action, R, next_state, True, beginning=False, priority=0.0)
 
     def train(self):
         """
         This method stores a transition to the replay buffer and updates the Q networks.
         """
-        if self.batch_size > len(self.replay_buffer._data):
+        if self.batch_size > self.replay_buffer.size:
             return None, None, None, None
 
         for iter in range(self.number_replays):
             # 2. sample next batch and perform batch update: (initially take less than batch_size because of the replay
             # buffer
-            batch_states, batch_actions, batch_next_states, batch_rewards, batch_dones = \
-                self.replay_buffer.next_batch(batch_size=self.batch_size)
+            batch_state_sequences, batch_actions, batch_rewards, batch_dones, _, weights, sample_idxs = \
+                self.replay_buffer.sample_batch(self.batch_size, history_length=1, n_steps=1, beta=self.prio_er_beta,
+                                                balance_batch=True)
+            batch_states = batch_state_sequences[:, 0, ...]
+            batch_next_states = batch_state_sequences[:, 1, ...]
+            batch_actions = batch_actions[:, 0]
+            batch_rewards = batch_rewards[:, 0]
+            batch_dones = batch_dones[:, 0]
 
             # Set the expected value of a terminated section to zero.
             non_final_mask = torch.from_numpy(np.array(batch_dones != True, dtype=np.uint8))
@@ -184,12 +204,19 @@ class DQNAgent:
             # td_loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
             td_loss = (q_pick - td_target.detach()).pow(2).mean()
 
+            # FIXME: Loss of individual samples needs to be weighted with weights (see replay_buffer.sample_batch).
             if self.intrinsic:
                 loss = self.lambda_intrinsic * td_loss + (1 - self.beta) * L_I + self.beta * L_F
             else:
                 loss = td_loss
             loss.backward()
             self.optimizer.step()
+
+            # TODO: Propagate change
+            if self.experience_replay == 'Prioritized':
+                for sample_idx in sample_idxs:
+                    new_priority = 42  # FIXME: This should be the loss of that particular sample.
+                    self.replay_buffer.propagate_up(sample_idx, new_priority)
 
         #       2.3 call soft update for target network
         if self.soft_update:
