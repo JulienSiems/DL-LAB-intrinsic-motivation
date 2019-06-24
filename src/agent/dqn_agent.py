@@ -44,7 +44,7 @@ class DQNAgent:
         # intrinsic reward generator
         self.intrinsic_reward_generator = intrinsic_reward_generator
 
-        nets = [self.Q, 
+        nets = [self.Q,
                 self.intrinsic_reward_generator.state_encoder,
                 self.intrinsic_reward_generator.inverse_dynamics_model,
                 self.intrinsic_reward_generator.forward_dynamics_model]
@@ -239,10 +239,11 @@ class DQNAgent:
             # Like in pytorch tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
             eps_threshold = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * \
                             np.exp(-1. * self.steps_done / self.epsilon_decay)
-            self.steps_done += 1
         else:
             eps_threshold = self.epsilon
         self.eps_threshold = eps_threshold
+        self.steps_done += 1
+
         r = np.random.uniform()
         if deterministic or sample > eps_threshold:
             with torch.no_grad():

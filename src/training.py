@@ -30,7 +30,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     # append image history to first state
     state = state_preprocessing(state, normalize=normalize_images)
     image_hist.extend([state] * (history_length + 1))
-    state = np.array(image_hist).reshape([history_length + 1, 84, 84])
+    state = np.array(image_hist).reshape([history_length + 1, 42, 42])
 
     beginning = True
     loss, td_loss, L_I, L_F = 0, 0, 0, 0
@@ -48,7 +48,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             if terminal:
                 # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
                 agent.n_step_buffer = []
-                return stats, loss, td_loss, L_I, L_F
+                return stats, loss, td_loss, L_I, L_F, info
 
             if rendering:
                 env.render()
@@ -59,7 +59,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         next_state = state_preprocessing(next_state)
         image_hist.append(next_state)
         image_hist.pop(0)
-        next_state = np.array(image_hist).reshape([history_length + 1, 84, 84])
+        next_state = np.array(image_hist).reshape([history_length + 1, 42, 42])
 
         if do_training:
             # FIXME: Need priority for sample. This should just be the loss. Right now, it's just a placeholder.
@@ -89,7 +89,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
     print('epsilon_threshold', agent.eps_threshold)
 
-    return stats, loss, td_loss, L_I, L_F
+    return stats, loss, td_loss, L_I, L_F, info
 
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
@@ -99,11 +99,16 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
     for i in range(num_episodes):
         print("episode %d" % i)
         max_timesteps_current = max_timesteps
-        stats, loss, td_loss, L_I, L_F = run_episode(env, agent, max_timesteps=max_timesteps_current,
-                                                     deterministic=False, do_training=True,
-                                                     rendering=rendering, soft_update=soft_update,
-                                                     skip_frames=skip_frames,
-                                                     history_length=history_length, normalize_images=normalize_images)
+        stats, loss, td_loss, L_I, L_F, info = run_episode(env, agent, max_timesteps=max_timesteps_current,
+                                                           deterministic=False, do_training=True,
+                                                           rendering=rendering, soft_update=soft_update,
+                                                           skip_frames=skip_frames,
+                                                           history_length=history_length,
+                                                           normalize_images=normalize_images)
+
+        for key, value in info.items():
+            if type(value) is not str:
+                writer.add_scalar('info_{}'.format(key), value, global_step=i)
 
         writer.add_scalar('train_loss', loss, global_step=i)
         writer.add_scalar('train_td_loss', td_loss, global_step=i)
@@ -135,7 +140,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
 
 
 def state_preprocessing(state, normalize=True):
-    image_resized = Image.fromarray(state).resize((84, 84), Image.ANTIALIAS)
+    image_resized = Image.fromarray(state).resize((42, 42), Image.ANTIALIAS)
     image_resized_bw = rgb2gray(np.array(image_resized))
     if normalize:
         image_resized_bw = image_resized_bw / 255.0
