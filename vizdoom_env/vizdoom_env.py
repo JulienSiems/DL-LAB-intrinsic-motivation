@@ -75,7 +75,8 @@ class DoomEnv(gym.Env):
         observation = self.state_image()
 
         info = {}
-        info['xy_pos'] = (self.game.get_game_variable(GameVariable(37)), self.game.get_game_variable(GameVariable(38)))
+        info['x_pos'] = self.game.get_game_variable(GameVariable(37))
+        info['y_pos'] = self.game.get_game_variable(GameVariable(38))
         info['rotation'] = self.game.get_game_variable(GameVariable(40))
 
         return observation, reward, done, info
