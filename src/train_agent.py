@@ -22,12 +22,12 @@ maps = {
 
 
 @click.command()
-@click.option('-ne', '--num_episodes', default=10000, type=click.INT, help='train for ... episodes')
+@click.option('-ne', '--num_episodes', default=1000, type=click.INT, help='train for ... episodes')
 @click.option('-ec', '--eval_cycle', default=50, type=click.INT, help='evaluate every ... episodes')
 @click.option('-ne', '--num_eval_episodes', default=1, type=click.INT, help='evaluate this many epochs')
 @click.option('-K', '--number_replays', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
-@click.option('-lr', '--learning_rate', default=1e-4, type=click.FLOAT)
+@click.option('-lr', '--learning_rate', default=1e-3, type=click.FLOAT)
 @click.option('-ca', '--capacity', default=2 ** 15, type=click.INT)
 @click.option('-g', '--gamma', default=0.95, type=click.FLOAT)
 @click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
@@ -41,7 +41,7 @@ maps = {
 @click.option('-env', '--environment', default=envs[0], type=click.Choice(envs))
 @click.option('-mp', '--map', default=maps[envs[0]][0], type=click.Choice(maps[envs[0]]))
 @click.option('-su', '--render_training', default=False, type=click.BOOL)
-@click.option('-mt', '--max_timesteps', default=5000, type=click.INT)
+@click.option('-mt', '--max_timesteps', default=2100, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=False, type=click.BOOL)
 @click.option('-ms', '--multi_step', default=True, type=click.BOOL)
@@ -53,7 +53,7 @@ maps = {
 @click.option('-e', '--extrinsic', default=False, type=click.BOOL)
 @click.option('-uq', '--update_q_target', default=1000, type=click.INT,
               help='How many steps to pass between each q_target update')
-@click.option('-es', '--epsilon_schedule', default=True, type=click.BOOL)
+@click.option('-es', '--epsilon_schedule', default=False, type=click.BOOL)
 @click.option('-est', '--epsilon_start', default=0.9, type=click.FLOAT)
 @click.option('-end', '--epsilon_end', default=0.05, type=click.FLOAT)
 @click.option('-edc', '--epsilon_decay', default=30000, type=click.INT)
@@ -72,9 +72,6 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
-    writer = setup_experiment_folder_writer(inspect.currentframe(), name='Mario', log_dir='Breakout2',
-                                            args_for_filename=['algorithm', 'loss_function', 'num_episodes',
-                                                               'number_replays'])
 
     # env = retro.make(game='MontezumaRevenge-Atari2600')
     # env = retro.make(game='SpaceInvaders-Atari2600')
@@ -84,6 +81,9 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     if environment == envs[0]:
         from vizdoom_env.vizdoom_env import DoomEnv
         env = DoomEnv(map_name=map, render=render_training)
+        writer = setup_experiment_folder_writer(inspect.currentframe(), name='Vizdoom', log_dir='vizdoom',
+                                                args_for_filename=['algorithm', 'loss_function', 'num_episodes',
+                                                                   'number_replays'])
     else:
         if virtual_display:
             if render_training:
@@ -100,18 +100,24 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
             # env = retro.make(game='SuperMarioBros-Nes')
             env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
             env = JoypadSpace(env, COMPLEX_MOVEMENT)
+            writer = setup_experiment_folder_writer(inspect.currentframe(), name='Mario', log_dir='Mario',
+                                                    args_for_filename=['algorithm', 'loss_function', 'num_episodes',
+                                                                       'number_replays'])
         elif environment == envs[2]:
             import gym_minigrid
             from src.train_gridworld import ClassicalGridworldWrapper
             grid_size = 100
             env = gym_minigrid.envs.EmptyEnv(size=grid_size)
             env = ClassicalGridworldWrapper(env)
+            writer = setup_experiment_folder_writer(inspect.currentframe(), name='GridWorld', log_dir='GridWorld',
+                                                    args_for_filename=['algorithm', 'loss_function', 'num_episodes',
+                                                                       'number_replays'])
         else:
             raise NotImplementedError()
 
     num_actions = env.action_space.n
 
-    state_dim = (history_length + 1, 84, 84)
+    state_dim = (history_length + 1, 42, 42)
 
     # Define Q network, target network and DQN agent
     if model == 'Resnet':
