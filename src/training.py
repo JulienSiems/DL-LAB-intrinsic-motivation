@@ -42,7 +42,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         # Hint: frame skipping might help you to get better results.
         reward = 0
         for _ in range(skip_frames + 1):
-            next_state, r, terminal, info = env.step(action_id)
+            next_state, r, terminal, info = env.step(int(action_id))
             reward += r
 
             if terminal:

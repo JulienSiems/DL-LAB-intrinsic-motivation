@@ -9,15 +9,6 @@ from src.agent.dqn_agent import DQNAgent
 from src.agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork, InverseModel, ForwardModel, Encoder
 from src.agent.intrinsic_reward import IntrinsicRewardGenerator
 from src.training import train_online
-from vizdoom_env.vizdoom_env import DoomEnv
-import gym_minigrid
-from src.train_gridworld import ClassicalGridworldWrapper
-
-# import retro
-
-# import gym
-# from nes_py.wrappers import JoypadSpace
-# import gym_super_mario_bros
 
 from utils.utils import *
 import click
@@ -37,7 +28,7 @@ maps = {
 @click.option('-K', '--number_replays', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
 @click.option('-lr', '--learning_rate', default=1e-4, type=click.FLOAT)
-@click.option('-ca', '--capacity', default=2**15, type=click.INT)
+@click.option('-ca', '--capacity', default=2 ** 15, type=click.INT)
 @click.option('-g', '--gamma', default=0.95, type=click.FLOAT)
 @click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
 @click.option('-t', '--tau', default=0.01, type=click.FLOAT)
@@ -91,23 +82,32 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     # env = retro.make(game='SuperMarioBros-Nes', use_restricted_actions=retro.Actions.DISCRETE)
     # env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
     if environment == envs[0]:
+        from vizdoom_env.vizdoom_env import DoomEnv
         env = DoomEnv(map_name=map, render=render_training)
     else:
         if virtual_display:
             if render_training:
-                print('On the tfpool computers this will probably not work together. Better deactivate render training when using the virtual display.')
+                print(
+                    'On the tfpool computers this will probably not work together. Better deactivate render training when using the virtual display.')
             from pyvirtualdisplay import Display
             display = Display(visible=0, size=(224, 240))
             display.start()
         if environment == envs[1]:
-            env = retro.make(game='SuperMarioBros-Nes', use_restricted_actions=retro.Actions.DISCRETE)
+            import gym
+            from nes_py.wrappers import JoypadSpace
+            import gym_super_mario_bros
+            from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
+            # env = retro.make(game='SuperMarioBros-Nes')
+            env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
+            env = JoypadSpace(env, COMPLEX_MOVEMENT)
         elif environment == envs[2]:
+            import gym_minigrid
+            from src.train_gridworld import ClassicalGridworldWrapper
             grid_size = 100
             env = gym_minigrid.envs.EmptyEnv(size=grid_size)
             env = ClassicalGridworldWrapper(env)
         else:
             raise NotImplementedError()
-
 
     num_actions = env.action_space.n
 
