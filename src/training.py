@@ -40,7 +40,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         action_id = agent.act(state=state, deterministic=deterministic)
 
         # Hint: frame skipping might help you to get better results.
-        reward = 0
+        reward = 0.0
         for _ in range(skip_frames + 1):
             next_state, r, terminal, info = env.step(int(action_id))
             reward += r
@@ -62,9 +62,10 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         next_state = np.array(image_hist).reshape([history_length + 1, 42, 42])
 
         if do_training:
-            # FIXME: Need priority for sample. This should just be the loss. Right now, it's just a placeholder.
+            # every transition is added with a high priority such that it gets replayed at least once
             agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
-                                   terminal=terminal, beginning=beginning, priority=1.0)
+                                   terminal=terminal, beginning=beginning, priority=500.0)
+
             loss, td_loss, L_I, L_F = agent.train()
 
             # Update the target network

@@ -42,7 +42,6 @@ class UniformReplayBuffer:
         :param done: Done flag
         :param beginning: Flag which indicates a new episode just begun. If true, increment cur_episode_idx.
         """
-        # assert priority > 0
         if beginning:
             self.cur_episode_idx += 1
         self.states[self.cur_idx] = s
@@ -152,7 +151,7 @@ class PrioritizedReplayBuffer:
         self.cur_episode_idx = -1
         self.sum_tree = np.zeros(shape=(self.capacity * 2,), dtype=np.double)
         self.sum_tree_depth = int(np.log2(self.capacity * 2))
-        self.priority_eps = 1e-8  # added to every transition priority -> non-zero probability for all
+        self.priority_eps = 1e-2  # added to every transition priority -> non-zero probability for all
 
     def propagate_up(self, idx, priority):
         """
@@ -236,14 +235,14 @@ class PrioritizedReplayBuffer:
         # assert history_length >= 1
         # assert n_steps >= 1
         if balance_batch:
-            ls = np.linspace(0.0, 1.0, batch_size + 1)
+            ls = np.linspace(0.0, 0.999, batch_size + 1)
             sample_idxs_and_priorities = [self._sample_idx(ls[bidx], ls[bidx+1]) for bidx in range(batch_size)]
         else:
-            sample_idxs_and_priorities = [self._sample_idx(0.0, 1.0) for _ in range(batch_size)]
+            sample_idxs_and_priorities = [self._sample_idx(0.0, 0.999) for _ in range(batch_size)]
         sample_idxs = np.array([tmp[0] for tmp in sample_idxs_and_priorities])
         priorities = np.array([tmp[1] for tmp in sample_idxs_and_priorities], dtype=np.float32)
         weights = np.power((priorities / self.sum_tree[1]) * self.size, -beta)
-        weights = weights / np.max(weights)  # normalize weights to range [0, 1]
+        weights = weights / (np.max(weights) + 1e-8)  # normalize weights to be max 1.0
         batch_state_sequences_shape = [batch_size, n_steps + 1, self.state_shape[1] * history_length]
         batch_state_sequences_shape += list(self.state_shape)[2:]
         batch_state_sequences = np.zeros(shape=batch_state_sequences_shape, dtype=self.state_sample_dtype)

@@ -28,7 +28,7 @@ maps = {
 @click.option('-K', '--number_replays', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
 @click.option('-lr', '--learning_rate', default=1e-3, type=click.FLOAT)
-@click.option('-ca', '--capacity', default=2 ** 15, type=click.INT)
+@click.option('-ca', '--capacity', default=2 ** 18, type=click.INT)
 @click.option('-g', '--gamma', default=0.95, type=click.FLOAT)
 @click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
 @click.option('-t', '--tau', default=0.01, type=click.FLOAT)
@@ -62,13 +62,15 @@ maps = {
 @click.option('-pre_icm', '--pre_intrinsic', default=False, type=click.BOOL)
 @click.option('-er', '--experience_replay', default='Uniform', type=click.Choice(['Uniform', 'Prioritized']))
 @click.option('-per_a', '--prio_er_alpha', default=0.6, type=click.FLOAT)
-@click.option('-per_b', '--prio_er_beta', default=0.4, type=click.FLOAT)
+@click.option('-per_bs', '--prio_er_beta_start', default=0.4, type=click.FLOAT)
+@click.option('-per_be', '--prio_er_beta_end', default=1.0, type=click.FLOAT)
+@click.option('-per_bdc', '--prio_er_beta_decay', default=30000, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, environment, map,
          render_training, max_timesteps, normalize_images, non_uniform_sampling, multi_step, multi_step_size,
          mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, update_q_target, epsilon_schedule,
          epsilon_start, epsilon_end, epsilon_decay, virtual_display, seed, pre_intrinsic, experience_replay,
-         prio_er_alpha, prio_er_beta):
+         prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
@@ -151,7 +153,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                      update_q_target=update_q_target, lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic,
                      epsilon_start=epsilon_start, epsilon_end=epsilon_end, epsilon_decay=epsilon_decay,
                      extrinsic=extrinsic, pre_intrinsic=pre_intrinsic, experience_replay=experience_replay,
-                     prio_er_alpha=prio_er_alpha, prio_er_beta=prio_er_beta, state_dim=state_dim)
+                     prio_er_alpha=prio_er_alpha, prio_er_beta_start=prio_er_beta_start,
+                     prio_er_beta_end=prio_er_beta_end, prio_er_beta_decay=prio_er_beta_decay, state_dim=state_dim)
 
     train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
                  num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,

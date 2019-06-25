@@ -17,7 +17,7 @@ class DQNAgent:
 
     def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, intrinsic, extrinsic,
                  mu, beta, lambda_intrinsic, epsilon_start, epsilon_end, epsilon_decay, update_q_target,
-                 experience_replay, prio_er_alpha, prio_er_beta, state_dim,
+                 experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, state_dim,
                  multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95, batch_size=64, epsilon=0.1,
                  tau=0.01, lr=1e-4, number_replays=10, loss_function='L1', soft_update=False, algorithm='DQN',
                  epsilon_schedule=False, pre_intrinsic=False, **kwargs):
@@ -57,7 +57,10 @@ class DQNAgent:
         tmp_state_shape = tuple([1] + list(state_dim))
         self.experience_replay = experience_replay
         self.prio_er_alpha = prio_er_alpha
-        self.prio_er_beta = prio_er_beta
+        self.prio_er_beta_start = prio_er_beta_start
+        self.prio_er_beta_end = prio_er_beta_end
+        self.prio_er_beta_decay = prio_er_beta_decay
+        self.cur_prio_er_beta = prio_er_beta_start
         if experience_replay == 'Uniform':
             self.replay_buffer = UniformReplayBuffer(capacity=capacity, state_shape=tmp_state_shape,
                                                      state_store_dtype=np.float16, state_sample_dtype=np.float32)
@@ -83,6 +86,7 @@ class DQNAgent:
         self.number_replays = number_replays
         self.num_actions = num_actions
         self.steps_done = 0
+        self.train_steps_done = 0
         self.soft_update = soft_update
         self.non_uniform_sampling = non_uniform_sampling
 
@@ -124,14 +128,15 @@ class DQNAgent:
             while len(self.n_step_buffer) > 0:
                 R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(len(self.n_step_buffer))])
                 state, action, next_state, _ = self.n_step_buffer.pop(0)
-
-                # FIXME: what should priority be? can we always set beginning=False in this case?
-                self.replay_buffer.add_transition(state, action, R, next_state, True, beginning=False, priority=0.0)
+                self.replay_buffer.add_transition(state, action, R, next_state, True, beginning=False, priority=500.0)
 
     def train(self):
         """
         This method stores a transition to the replay buffer and updates the Q networks.
         """
+        interpolate_b = min(1.0, self.train_steps_done / self.prio_er_beta_decay)
+        self.cur_prio_er_beta = self.prio_er_beta_start * (1.0 - interpolate_b) + self.prio_er_beta_end * interpolate_b
+
         if self.batch_size > self.replay_buffer.size:
             return None, None, None, None
 
@@ -139,13 +144,14 @@ class DQNAgent:
             # 2. sample next batch and perform batch update: (initially take less than batch_size because of the replay
             # buffer
             batch_state_sequences, batch_actions, batch_rewards, batch_dones, _, weights, sample_idxs = \
-                self.replay_buffer.sample_batch(self.batch_size, history_length=1, n_steps=1, beta=self.prio_er_beta,
-                                                balance_batch=True)
+                self.replay_buffer.sample_batch(self.batch_size, history_length=1, n_steps=1,
+                                                beta=self.cur_prio_er_beta, balance_batch=True)
             batch_states = batch_state_sequences[:, 0, ...]
             batch_next_states = batch_state_sequences[:, 1, ...]
             batch_actions = batch_actions[:, 0]
             batch_rewards = batch_rewards[:, 0]
             batch_dones = batch_dones[:, 0]
+            weights = torch.from_numpy(weights).detach().to(device)
 
             # Set the expected value of a terminated section to zero.
             non_final_mask = torch.from_numpy(np.array(batch_dones != True, dtype=np.uint8))
@@ -167,13 +173,15 @@ class DQNAgent:
 
             if self.intrinsic:
                 # Compute intrinsic_reward
-                L_I, L_F, intrinsic_reward = self.intrinsic_reward_generator.compute_intrinsic_reward(
+                L_I, L_F, intrinsic_reward, l_i = self.intrinsic_reward_generator.compute_intrinsic_reward(
                     state=batch_states,
                     action=batch_actions,
                     next_state=batch_next_states)
+                r_i = intrinsic_reward
                 intrinsic_reward = intrinsic_reward.detach() * self.mu
             else:
-                L_I, L_F, intrinsic_reward = [torch.tensor([0], dtype=torch.float, device=device) for _ in range(3)]
+                L_I, L_F, intrinsic_reward, l_i = \
+                    [torch.tensor([0], dtype=torch.float, device=device) for _ in range(4)]
 
             if self.extrinsic or self.pre_intrinsic:
                 extrinsic_reward = torch.from_numpy(batch_rewards).to(device).float()
@@ -202,27 +210,28 @@ class DQNAgent:
             self.optimizer.zero_grad()
             # print(L_I.item(), L_F.item())
             # td_loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
-            td_loss = (q_pick - td_target.detach()).pow(2).mean()
+            td_losses = (q_pick - td_target.detach()).pow(2)
 
-            # FIXME: Loss of individual samples needs to be weighted with weights (see replay_buffer.sample_batch).
             if self.intrinsic:
-                loss = self.lambda_intrinsic * td_loss + (1 - self.beta) * L_I + self.beta * L_F
+                losses = self.lambda_intrinsic * td_losses + (1 - self.beta) * l_i + self.beta * r_i
             else:
-                loss = td_loss
-            loss.backward()
+                losses = td_losses
+            weighted_losses = losses * weights
+            weighted_losses.mean().backward()
             self.optimizer.step()
 
-            # TODO: Propagate change
+            # update priorities of transitions in replay buffer
             if self.experience_replay == 'Prioritized':
-                for sample_idx in sample_idxs:
-                    new_priority = 42  # FIXME: This should be the loss of that particular sample.
-                    self.replay_buffer.propagate_up(sample_idx, new_priority)
+                for s_idx in range(self.batch_size):
+                    new_priority = weighted_losses[s_idx] + self.replay_buffer.priority_eps
+                    self.replay_buffer.propagate_up(sample_idxs[s_idx], new_priority)
 
-        #       2.3 call soft update for target network
+        # call soft update for target network
         if self.soft_update:
             soft_update(self.Q_target, self.Q, self.tau)
 
-        return loss.item(), td_loss.item(), L_I.item(), L_F.item()
+        self.train_steps_done += 1
+        return losses.mean().item(), td_losses.mean().item(), L_I.item(), L_F.item()
 
     def act(self, state, deterministic):
         """
