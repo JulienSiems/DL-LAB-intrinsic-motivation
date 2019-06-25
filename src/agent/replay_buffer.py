@@ -243,6 +243,7 @@ class PrioritizedReplayBuffer:
         priorities = np.array([tmp[1] for tmp in sample_idxs_and_priorities], dtype=np.float32)
         weights = np.power((priorities / self.sum_tree[1]) * self.size, -beta)
         weights = weights / (np.max(weights) + 1e-8)  # normalize weights to be max 1.0
+        weights = np.array(weights, dtype=np.float32)
         batch_state_sequences_shape = [batch_size, n_steps + 1, self.state_shape[1] * history_length]
         batch_state_sequences_shape += list(self.state_shape)[2:]
         batch_state_sequences = np.zeros(shape=batch_state_sequences_shape, dtype=self.state_sample_dtype)
