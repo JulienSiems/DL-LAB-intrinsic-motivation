@@ -1,18 +1,23 @@
 import inspect
 import json
+import socket
+from datetime import datetime
 
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 import os
 from tensorboardX import SummaryWriter
-
-from datetime import datetime
-import socket
 
 LEFT = 1
 RIGHT = 2
 STRAIGHT = 0
 ACCELERATE = 3
 BRAKE = 4
+
+sns.set_style('whitegrid')
 
 
 def compute_accuracy(y_pred, y_gt):
@@ -105,3 +110,23 @@ class EpisodeStats:
     def get_action_usage(self, action_id):
         ids = np.array(self.actions_ids)
         return (len(ids[ids == action_id]) / len(ids))
+
+
+def plot_trajectory(trajectory):
+    trajectory = np.array(trajectory)
+
+    fig = plt.figure(figsize=(6, 6))
+    trajectory_plot = plt.plot(trajectory[:, 0], trajectory[:, 1],
+                               # color=[plt.cm.magma(i) for i in np.linspace(0, 1, len(trajectory))],
+                               label='Exploration', marker='o', linestyle='dashed')
+
+    # trajectory_plot.set_array(np.linspace(0, 1, len(trajectory)))
+    # cbar = fig.colorbar(trajectory_plot, ticks=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    # cbar.ax.set_yticklabels([str(i) for i in np.arange(start=0, stop=len(trajectory) + 1, step=20)])
+    plt.grid(True, which="both", ls="-", alpha=0.5)
+    plt.xlabel('x coordinate')
+    plt.ylabel('y coordinate')
+
+    plt.axis('equal')
+    plt.tight_layout()
+    return fig

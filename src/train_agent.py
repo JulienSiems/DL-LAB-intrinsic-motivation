@@ -90,7 +90,6 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
             display = Display(visible=0, size=(224, 240))
             display.start()
         if environment == envs[1]:
-            import gym
             from nes_py.wrappers import JoypadSpace
             import gym_super_mario_bros
             from gym_super_mario_bros.actions import COMPLEX_MOVEMENT

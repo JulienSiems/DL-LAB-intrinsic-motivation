@@ -34,6 +34,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
     beginning = True
     loss, td_loss, L_I, L_F = 0, 0, 0, 0
+    trajectory = []
     while True:
         # get action_id from agent
         # Hint: adapt the probabilities of the 5 actions for random sampling so that the agent explores properly.
@@ -48,13 +49,15 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             if terminal:
                 # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
                 agent.n_step_buffer = []
-                return stats, loss, td_loss, L_I, L_F, info
+                return stats, loss, td_loss, L_I, L_F, info, trajectory
 
             if rendering:
                 env.render()
 
             if terminal:
                 break
+
+        trajectory = trajectory + [[info['x_pos'], info['y_pos']]]
 
         next_state = state_preprocessing(next_state)
         image_hist.append(next_state)
@@ -65,7 +68,6 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             # every transition is added with a high priority such that it gets replayed at least once
             agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
                                    terminal=terminal, beginning=beginning, priority=500.0)
-
             loss, td_loss, L_I, L_F = agent.train()
 
             # Update the target network
@@ -90,7 +92,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
     print('epsilon_threshold', agent.eps_threshold)
 
-    return stats, loss, td_loss, L_I, L_F, info
+    return stats, loss, td_loss, L_I, L_F, info, trajectory
 
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
@@ -100,12 +102,15 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
     for i in range(num_episodes):
         print("episode %d" % i)
         max_timesteps_current = max_timesteps
-        stats, loss, td_loss, L_I, L_F, info = run_episode(env, agent, max_timesteps=max_timesteps_current,
-                                                           deterministic=False, do_training=True,
-                                                           rendering=rendering, soft_update=soft_update,
-                                                           skip_frames=skip_frames,
-                                                           history_length=history_length,
-                                                           normalize_images=normalize_images)
+        stats, loss, td_loss, L_I, L_F, info, trajectory = run_episode(env, agent, max_timesteps=max_timesteps_current,
+                                                                       deterministic=False, do_training=True,
+                                                                       rendering=rendering, soft_update=soft_update,
+                                                                       skip_frames=skip_frames,
+                                                                       history_length=history_length,
+                                                                       normalize_images=normalize_images)
+        if len(trajectory) > 0:
+            fig = plot_trajectory(trajectory)
+            writer.add_figure('trajectory', figure=fig, global_step=i)
 
         for key, value in info.items():
             if type(value) is not str:
