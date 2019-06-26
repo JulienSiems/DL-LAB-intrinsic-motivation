@@ -65,21 +65,16 @@ maps = {
 @click.option('-per_bs', '--prio_er_beta_start', default=0.4, type=click.FLOAT)
 @click.option('-per_be', '--prio_er_beta_end', default=1.0, type=click.FLOAT)
 @click.option('-per_bdc', '--prio_er_beta_decay', default=30000, type=click.INT)
+@click.option('-fe', '--fixed_encoder', default=False, type=click.BOOL)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, environment, map,
          render_training, max_timesteps, normalize_images, non_uniform_sampling, multi_step, multi_step_size,
          mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, update_q_target, epsilon_schedule,
          epsilon_start, epsilon_end, epsilon_decay, virtual_display, seed, pre_intrinsic, experience_replay,
-         prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay):
+         prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, fixed_encoder):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
-
-    # env = retro.make(game='MontezumaRevenge-Atari2600')
-    # env = retro.make(game='SpaceInvaders-Atari2600')
-    # env = retro.make(game='BreakOut-Atari2600',  use_restricted_actions=retro.Actions.DISCRETE)
-    # env = retro.make(game='SuperMarioBros-Nes', use_restricted_actions=retro.Actions.DISCRETE)
-    # env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
     if environment == envs[0]:
         from vizdoom_env.vizdoom_env import DoomEnv
         env = DoomEnv(map_name=map, render=render_training)
@@ -142,7 +137,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     intrinsic_reward_network = IntrinsicRewardGenerator(state_encoder=state_encoder,
                                                         inverse_dynamics_model=inverse_dynamics_model,
                                                         forward_dynamics_model=forward_dynamics_model,
-                                                        num_actions=num_actions)
+                                                        num_actions=num_actions, fixed_encoder=fixed_encoder)
 
     agent = DQNAgent(Q=Q_net, Q_target=Q_target_net, intrinsic_reward_generator=intrinsic_reward_network,
                      num_actions=num_actions, gamma=gamma, batch_size=batch_size, tau=tau, epsilon=epsilon,
