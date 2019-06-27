@@ -27,6 +27,7 @@ class DoomEnv(gym.Env):
         # Found here: https://github.com/mwydmuch/ViZDoom/blob/master/examples/python/objects_and_sectors.py
         # Requires vizdoom 1.1.8, install using pip install git+https://github.com/mwydmuch/ViZDoom
         self.game.set_sectors_info_enabled(True)
+        self.game.set_objects_info_enabled(True)
 
         # set modified configs here
         self.game.set_screen_resolution(ScreenResolution.RES_320X240)

@@ -113,7 +113,7 @@ class EpisodeStats:
         return (len(ids[ids == action_id]) / len(ids))
 
 
-def plot_trajectory(trajectory, sectors, sector_bb):
+def plot_trajectory(trajectory, sectors, sector_bb, objects):
     trajectory = np.array(trajectory)
 
     fig = plt.figure()
@@ -130,6 +130,14 @@ def plot_trajectory(trajectory, sectors, sector_bb):
             plt.text((coor['x_min'] + coor['x_max']) / 2, (coor['y_min'] + coor['y_max']) / 2, str(sector_id),
                      horizontalalignment='center', verticalalignment='center')
 
+    if objects is not None:
+        for o in objects:
+            # Plot object on map
+            if o.name == "DoomPlayer":
+                plt.plot(o.position_x, o.position_y, color='green', marker='o', label='Player')
+            else:
+                plt.plot(o.position_x, o.position_y, color='red', marker='x', label='Goal')
+
     trajectory_plot = plt.scatter(trajectory[:, 0], trajectory[:, 1],
                                   color=[plt.cm.magma(i) for i in np.linspace(0, 1, len(trajectory))],
                                   label='Exploration', marker='o', linestyle='dashed')
@@ -142,6 +150,7 @@ def plot_trajectory(trajectory, sectors, sector_bb):
     plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.xlabel('x coordinate')
     plt.ylabel('y coordinate')
+    plt.legend()
 
     plt.axis('equal')
     plt.tight_layout()

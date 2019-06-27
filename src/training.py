@@ -127,9 +127,14 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                                                            normalize_images=normalize_images)
 
         if len(trajectory) > 0:
-            writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs), global_step=i)
             if type(env) == DoomEnv:
+                objects = env.state.objects
+                writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, objects),
+                                  global_step=i)
                 writer.add_scalar('num_visited_sectors', len(visited_sectors), global_step=i)
+            else:
+                writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, None),
+                                  global_step=i)
 
         for key, value in info.items():
             if type(value) is not str:
