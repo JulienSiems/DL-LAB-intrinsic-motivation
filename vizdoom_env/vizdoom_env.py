@@ -1,6 +1,6 @@
-import os
-import numpy as np
 import gym
+import numpy as np
+import os
 from vizdoom import *
 
 DOOM_MAPS = [
@@ -19,6 +19,15 @@ class DoomEnv(gym.Env):
         # self.game.set_seed(seed)
         scenarios_dir = os.path.join(os.path.dirname(__file__), 'scenarios')
         self.game.load_config(os.path.join(scenarios_dir, self.map_name + ".cfg"))
+        self.game.set_automap_buffer_enabled(True)
+        self.game.set_automap_mode(AutomapMode.WHOLE)
+        # self.game.set_automap_render_textures(False)
+        self.game.set_automap_rotate(False)
+        # Enables information about all sectors (map layout).
+        # Found here: https://github.com/mwydmuch/ViZDoom/blob/master/examples/python/objects_and_sectors.py
+        # Requires vizdoom 1.1.8, install using pip install git+https://github.com/mwydmuch/ViZDoom
+        self.game.set_sectors_info_enabled(True)
+
         # set modified configs here
         self.game.set_screen_resolution(ScreenResolution.RES_320X240)
         self.game.set_window_visible(render)
@@ -34,7 +43,6 @@ class DoomEnv(gym.Env):
         self.game.init()
         self.state = self.game.get_state()
 
-
     def _init_one_hot_actions(self):
         self.action_oh = []
         for i in range(self.num_actions):
@@ -42,7 +50,6 @@ class DoomEnv(gym.Env):
             zeros[i] = 1
             self.action_oh.append(zeros)
         self.action_oh.append([0] * self.num_actions)
-
 
     def state_image(self):
         return np.transpose(self.state.screen_buffer, (1, 2, 0))

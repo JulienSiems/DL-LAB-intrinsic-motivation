@@ -4,6 +4,7 @@ import socket
 from datetime import datetime
 
 import matplotlib as mpl
+
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -112,17 +113,27 @@ class EpisodeStats:
         return (len(ids[ids == action_id]) / len(ids))
 
 
-def plot_trajectory(trajectory):
+def plot_trajectory(trajectory, sectors):
     trajectory = np.array(trajectory)
 
-    fig = plt.figure(figsize=(6, 6))
-    trajectory_plot = plt.plot(trajectory[:, 0], trajectory[:, 1],
-                               # color=[plt.cm.magma(i) for i in np.linspace(0, 1, len(trajectory))],
-                               label='Exploration', marker='o', linestyle='dashed')
+    fig = plt.figure()
 
-    # trajectory_plot.set_array(np.linspace(0, 1, len(trajectory)))
-    # cbar = fig.colorbar(trajectory_plot, ticks=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
-    # cbar.ax.set_yticklabels([str(i) for i in np.arange(start=0, stop=len(trajectory) + 1, step=20)])
+    if sectors is not None:
+        for s in sectors:
+            # Plot sector on map
+            for l in s.lines:
+                if l.is_blocking:
+                    plt.plot([l.x1, l.x2], [l.y1, l.y2], color='black', linewidth=2)
+
+    trajectory_plot = plt.scatter(trajectory[:, 0], trajectory[:, 1],
+                                  color=[plt.cm.magma(i) for i in np.linspace(0, 1, len(trajectory))],
+                                  label='Exploration', marker='o', linestyle='dashed')
+
+    trajectory_plot.set_array(np.linspace(0, 1, len(trajectory)))
+    cbar = fig.colorbar(trajectory_plot, ticks=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    cbar.ax.set_yticklabels([str(i) for i in np.arange(start=0, stop=len(trajectory) + 1, step=20)])
+    cbar.ax.set_ylabel('Action step', rotation=270)
+
     plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.xlabel('x coordinate')
     plt.ylabel('y coordinate')

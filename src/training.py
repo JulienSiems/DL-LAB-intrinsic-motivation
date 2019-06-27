@@ -5,6 +5,7 @@ sys.path.append("../")
 from utils.utils import *
 import torch
 from PIL import Image
+from vizdoom_env.vizdoom_env import DoomEnv
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -49,7 +50,10 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             if terminal:
                 # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
                 agent.n_step_buffer = []
-                return stats, loss, td_loss, L_I, L_F, info, trajectory
+                if type(env) == DoomEnv:
+                    return stats, loss, td_loss, L_I, L_F, info, trajectory, env.state.sectors
+                else:
+                    return stats, loss, td_loss, L_I, L_F, info, trajectory, None
 
             if rendering:
                 env.render()
@@ -92,7 +96,10 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
     print('epsilon_threshold', agent.eps_threshold)
 
-    return stats, loss, td_loss, L_I, L_F, info, trajectory
+    if type(env) == DoomEnv:
+        return stats, loss, td_loss, L_I, L_F, info, trajectory, env.state.sectors
+    else:
+        return stats, loss, td_loss, L_I, L_F, info, trajectory, None
 
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
@@ -102,14 +109,16 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
     for i in range(num_episodes):
         print("episode %d" % i)
         max_timesteps_current = max_timesteps
-        stats, loss, td_loss, L_I, L_F, info, trajectory = run_episode(env, agent, max_timesteps=max_timesteps_current,
-                                                                       deterministic=False, do_training=True,
-                                                                       rendering=rendering, soft_update=soft_update,
-                                                                       skip_frames=skip_frames,
-                                                                       history_length=history_length,
-                                                                       normalize_images=normalize_images)
+        stats, loss, td_loss, L_I, L_F, info, trajectory, sectors = run_episode(env, agent,
+                                                                                max_timesteps=max_timesteps_current,
+                                                                                deterministic=False, do_training=True,
+                                                                                rendering=rendering,
+                                                                                soft_update=soft_update,
+                                                                                skip_frames=skip_frames,
+                                                                                history_length=history_length,
+                                                                                normalize_images=normalize_images)
         if len(trajectory) > 0:
-            fig = plot_trajectory(trajectory)
+            fig = plot_trajectory(trajectory, sectors)
             writer.add_figure('trajectory', figure=fig, global_step=i)
 
         for key, value in info.items():
