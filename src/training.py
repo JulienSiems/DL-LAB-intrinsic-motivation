@@ -36,6 +36,10 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     beginning = True
     loss, td_loss, L_I, L_F = 0, 0, 0, 0
     trajectory = []
+    if type(env) == DoomEnv:
+        sector_bbs = create_sector_bounding_box(env.state.sectors)
+        visited_sectors = {}
+
     while True:
         # get action_id from agent
         # Hint: adapt the probabilities of the 5 actions for random sampling so that the agent explores properly.
@@ -51,16 +55,19 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
                 # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
                 agent.n_step_buffer = []
                 if type(env) == DoomEnv:
-                    return stats, loss, td_loss, L_I, L_F, info, trajectory, env.state.sectors
+                    return stats, loss, td_loss, L_I, L_F, info, trajectory, env.state.sectors, visited_sectors, sector_bbs
                 else:
-                    return stats, loss, td_loss, L_I, L_F, info, trajectory, None
+                    return stats, loss, td_loss, L_I, L_F, info, trajectory, None, None, None
 
             if rendering:
                 env.render()
 
             if terminal:
                 break
-
+        if type(env) == DoomEnv:
+            curr_sector = determine_sector(info['x_pos'], info['y_pos'], sector_bbs)
+            visited_sectors['sector_{}'.format(curr_sector)] = \
+                visited_sectors.get('sector_{}'.format(curr_sector), 0) + 1
         trajectory = trajectory + [[info['x_pos'], info['y_pos']]]
 
         next_state = state_preprocessing(next_state)
@@ -97,9 +104,9 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     print('epsilon_threshold', agent.eps_threshold)
 
     if type(env) == DoomEnv:
-        return stats, loss, td_loss, L_I, L_F, info, trajectory, env.state.sectors
+        return stats, loss, td_loss, L_I, L_F, info, trajectory, env.state.sectors, visited_sectors, sector_bbs
     else:
-        return stats, loss, td_loss, L_I, L_F, info, trajectory, None
+        return stats, loss, td_loss, L_I, L_F, info, trajectory, None, None, None
 
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
@@ -109,17 +116,20 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
     for i in range(num_episodes):
         print("episode %d" % i)
         max_timesteps_current = max_timesteps
-        stats, loss, td_loss, L_I, L_F, info, trajectory, sectors = run_episode(env, agent,
-                                                                                max_timesteps=max_timesteps_current,
-                                                                                deterministic=False, do_training=True,
-                                                                                rendering=rendering,
-                                                                                soft_update=soft_update,
-                                                                                skip_frames=skip_frames,
-                                                                                history_length=history_length,
-                                                                                normalize_images=normalize_images)
+        stats, loss, td_loss, L_I, L_F, info, trajectory, \
+        sectors, visited_sectors, sector_bbs = run_episode(env, agent, max_timesteps=max_timesteps_current,
+                                                           deterministic=False,
+                                                           do_training=True,
+                                                           rendering=rendering,
+                                                           soft_update=soft_update,
+                                                           skip_frames=skip_frames,
+                                                           history_length=history_length,
+                                                           normalize_images=normalize_images)
+
         if len(trajectory) > 0:
-            fig = plot_trajectory(trajectory, sectors)
-            writer.add_figure('trajectory', figure=fig, global_step=i)
+            writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs), global_step=i)
+            if type(env) == DoomEnv:
+                writer.add_scalar('num_visited_sectors', len(visited_sectors), global_step=i)
 
         for key, value in info.items():
             if type(value) is not str:

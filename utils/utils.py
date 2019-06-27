@@ -113,17 +113,22 @@ class EpisodeStats:
         return (len(ids[ids == action_id]) / len(ids))
 
 
-def plot_trajectory(trajectory, sectors):
+def plot_trajectory(trajectory, sectors, sector_bb):
     trajectory = np.array(trajectory)
 
     fig = plt.figure()
 
     if sectors is not None:
-        for s in sectors:
+        for i, s in enumerate(sectors):
             # Plot sector on map
             for l in s.lines:
                 if l.is_blocking:
                     plt.plot([l.x1, l.x2], [l.y1, l.y2], color='black', linewidth=2)
+
+        # Add section number to figure.
+        for sector_id, (_, coor) in enumerate(sector_bb.items()):
+            plt.text((coor['x_min'] + coor['x_max']) / 2, (coor['y_min'] + coor['y_max']) / 2, str(sector_id),
+                     horizontalalignment='center', verticalalignment='center')
 
     trajectory_plot = plt.scatter(trajectory[:, 0], trajectory[:, 1],
                                   color=[plt.cm.magma(i) for i in np.linspace(0, 1, len(trajectory))],
@@ -141,3 +146,28 @@ def plot_trajectory(trajectory, sectors):
     plt.axis('equal')
     plt.tight_layout()
     return fig
+
+
+def determine_sector(x, y, sector_bbs):
+    for i, (section_key, section_value) in enumerate(sector_bbs.items()):
+        # Determine which section the agent is in
+        if (section_value['x_min'] <= x <= section_value['x_max']) and (
+                section_value['y_min'] <= y <= section_value['y_max']):
+            return i
+
+    raise ValueError('The sector the agent is in could not be found.')
+
+
+def create_sector_bounding_box(sectors):
+    sector_bbs = {}
+    for i, sector_i in enumerate(sectors):
+        x_min = min(min([[line.x1, line.x2] for line in sector_i.lines]))
+        x_max = max(max([[line.x1, line.x2] for line in sector_i.lines]))
+
+        y_min = min(min([[line.y1, line.y2] for line in sector_i.lines]))
+        y_max = max(max([[line.y1, line.y2] for line in sector_i.lines]))
+
+        sector_bbs['section_{}'.format(i)] = {
+            'x_min': x_min, 'x_max': x_max, 'y_min': y_min, 'y_max': y_max, 'area': (x_max - x_min) * (y_max - y_min)
+        }
+    return sector_bbs
