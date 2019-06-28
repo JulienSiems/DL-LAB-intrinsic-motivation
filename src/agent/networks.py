@@ -4,19 +4,22 @@ import torch.nn.functional as F
 from torchvision.models.resnet import ResNet, BasicBlock
 import torch
 
+import math
+
+
 """
 CartPole network
 """
 
 
 class MLP(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_dim=400):
+    def __init__(self, state_dim, action_dim, hidden_dim=400, *args, **kwargs):
         super(MLP, self).__init__()
         self.fc1 = nn.Linear(state_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.fc3 = nn.Linear(hidden_dim, action_dim)
 
-    def forward(self, x):
+    def forward(self, x, *args, **kwargs):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         return self.fc3(x)
@@ -24,14 +27,14 @@ class MLP(nn.Module):
 
 # https://zablo.net/blog/post/using-resnet-for-mnist-in-pytorch-tutorial/
 class ResnetVariant(ResNet):
-    def __init__(self, history_length, num_actions):
+    def __init__(self, history_length, num_actions, *args, **kwargs):
         super(ResnetVariant, self).__init__(BasicBlock, [2, 2, 2, 2], num_classes=num_actions)
         self.conv1 = nn.Conv2d(history_length, 64,
                                kernel_size=(7, 7),
                                stride=(2, 2),
                                padding=(3, 3), bias=False)
 
-    def forward(self, x):
+    def forward(self, x, *args, **kwargs):
         return torch.softmax(
             super(ResnetVariant, self).forward(x), dim=-1)
 
@@ -41,7 +44,7 @@ class LeNetVariant(nn.Module):
     Adapted from LENET https://github.com/kuangliu/pytorch-cifar/blob/master/models/lenet.py
     """
 
-    def __init__(self, history_length, num_actions):
+    def __init__(self, history_length, num_actions, *args, **kwargs):
         super(LeNetVariant, self).__init__()
         self.conv1 = nn.Conv2d(history_length, 6, 5)
         self.conv2 = nn.Conv2d(6, 16, 5)
@@ -53,7 +56,7 @@ class LeNetVariant(nn.Module):
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
 
-    def forward(self, x):
+    def forward(self, x, *args, **kwargs):
         out = F.elu(self.conv1(x))
         out = F.max_pool2d(out, 2)
         out = F.elu(self.conv2(out))
@@ -68,69 +71,86 @@ class LeNetVariant(nn.Module):
 # https://github.com/diegoalejogm/deep-q-learning/blob/master/utils/net.py
 class DeepQNetwork(nn.Module):
 
-    def __init__(self, in_dim, num_actions, history_length):
+    def __init__(self, in_dim, num_actions, history_length, duelling=False, iqn=False, activation=nn.ReLU,
+                 hidden_dim=512, embedding_dim=64, *args, **kwargs):
         super(DeepQNetwork, self).__init__()
+        self.duelling = duelling
+        self.iqn = iqn
+        self.activation = activation
+        self.hidden_dim = hidden_dim
+        self.embedding_dim = embedding_dim
+
         self.conv1 = nn.Sequential(
-            nn.Conv2d(history_length, 32, kernel_size=3, stride=2, padding=1),
-            nn.ELU()
+            nn.Conv2d(history_length, 32, kernel_size=8, stride=4, padding=0),
+            activation()
         )
         self.conv2 = nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.ELU()
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
+            activation()
         )
         self.conv3 = nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.ELU()
-        )
-        self.conv4 = nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
-            nn.ELU()
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
+            activation()
         )
 
         dummy_input = torch.zeros(1, in_dim[0], in_dim[1], in_dim[2])
-        x = self.conv1(dummy_input)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        out_cnn = self.conv4(x)
-        out_cnn = out_cnn.view(out_cnn.size(0), -1)
-        cnn_out_size = out_cnn.shape[1]
+        out_cnn = self.conv3(self.conv2(self.conv1(dummy_input)))
+        cnn_out_dim = out_cnn.view(out_cnn.size(0), -1).shape[1]
 
-        # self.hidden = nn.Sequential(
-        #     nn.Linear(cnn_out_size, 512, bias=True),
-        #     nn.ELU()
-        # )
-        # self.out = nn.Sequential(
-        #     nn.Linear(512, num_actions, bias=True)
-        # )
+        if iqn:
+            raise NotImplemented('IQN not ready yet.')
+            self.n_range_pi = torch.arange(start=0, end=self.embedding_dim, dtype=torch.float32) * math.pi
+            self.iqn_phi = nn.Sequential(
+                nn.Linear(self.embedding_dim, cnn_out_dim, bias=True),
+                activation()
+            )
 
-        fc_out = 128
-        self.elu = nn.ELU(inplace=True)
-        self.fc_net = nn.Sequential(
-            nn.Linear(cnn_out_size, fc_out),
-            self.elu,
-        )
-        self.fc_adv_net = nn.Sequential(
-            nn.Linear(fc_out, num_actions)
-        )
-        self.fc_val_net = nn.Sequential(
-            nn.Linear(fc_out, 1),
-        )
+        if duelling:
+            self.fc1_val = nn.Sequential(
+                nn.Linear(cnn_out_dim, self.hidden_dim, bias=True),
+                activation()
+            )
+            self.fc2_val = nn.Sequential(
+                nn.Linear(self.hidden_dim, 1, bias=True)
+            )
+            self.fc1_adv = nn.Sequential(
+                nn.Linear(cnn_out_dim, self.hidden_dim, bias=True),
+                activation()
+            )
+            self.fc2_adv = nn.Sequential(
+                nn.Linear(self.hidden_dim, num_actions, bias=True)
+            )
+        else:
+            self.fc1 = nn.Sequential(
+                nn.Linear(cnn_out_dim, self.hidden_dim, bias=True),
+                activation()
+            )
+            self.fc2 = nn.Sequential(
+                nn.Linear(self.hidden_dim, num_actions, bias=True)
+            )
 
-    def forward(self, x):
+        for m in self.modules():
+            if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
+                nn.init.xavier_uniform_(m.weight)
+
+    def forward(self, x, tau=None, *args, **kwargs):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
-        x = self.conv4(x)
         x = x.view(x.size(0), -1)
-        # x = self.hidden(x)
-        # x = self.out(x)
 
-        xf = self.fc_net(x)
-        val = self.fc_val_net(xf)
-        adv = self.fc_adv_net(xf)
-        x = val + adv - adv.mean()
+        if self.iqn:
+            pass
 
-        return x
+        if self.duelling:
+            x_val = self.fc1_val(x)
+            x_val = self.fc2_val(x_val)
+            x_adv = self.fc1_adv(x)
+            x_adv = self.fc2_adv(x_adv)
+            return x_val + x_adv - x_adv.mean(dim=1, keepdim=True)
+        else:
+            x = self.fc1(x)
+            return self.fc2(x)
 
 
 class Encoder(nn.Module):

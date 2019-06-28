@@ -10,7 +10,7 @@ from vizdoom_env.vizdoom_env import DoomEnv
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def run_episode(env, agent, deterministic, history_length, skip_frames, max_timesteps, normalize_images,
+def run_episode(env, agent, deterministic, history_length, skip_frames, max_timesteps, normalize_images, state_dim,
                 do_training=True, rendering=False, soft_update=False):
     """
     This methods runs one episode for a gym environment.
@@ -29,9 +29,9 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     # env.viewer.window.dispatch_events()
 
     # append image history to first state
-    state = state_preprocessing(state, normalize=normalize_images)
-    image_hist.extend([state] * (history_length + 1))
-    state = np.array(image_hist).reshape([history_length + 1, 42, 42])
+    state = state_preprocessing(state, height=state_dim[1], width=state_dim[2], normalize=normalize_images)
+    image_hist.extend([state] * history_length)
+    state = np.array(image_hist).reshape(state_dim)
 
     beginning = True
     loss, td_loss, L_I, L_F = 0, 0, 0, 0
@@ -70,10 +70,11 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
                 visited_sectors.get('sector_{}'.format(curr_sector), 0) + 1
         trajectory = trajectory + [[info['x_pos'], info['y_pos']]]
 
-        next_state = state_preprocessing(next_state)
+        next_state = state_preprocessing(next_state, height=state_dim[1], width=state_dim[2],
+                                         normalize=normalize_images)
         image_hist.append(next_state)
         image_hist.pop(0)
-        next_state = np.array(image_hist).reshape([history_length + 1, 42, 42])
+        next_state = np.array(image_hist).reshape(state_dim)
 
         if do_training:
             # every transition is added with a high priority such that it gets replayed at least once
@@ -110,7 +111,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
-                 history_length, rendering, max_timesteps, normalize_images):
+                 history_length, rendering, max_timesteps, normalize_images, state_dim):
     print("... train agent")
 
     for i in range(num_episodes):
@@ -124,7 +125,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                                                            soft_update=soft_update,
                                                            skip_frames=skip_frames,
                                                            history_length=history_length,
-                                                           normalize_images=normalize_images)
+                                                           normalize_images=normalize_images,
+                                                           state_dim=state_dim)
 
         if len(trajectory) > 0:
             if type(env) == DoomEnv:
@@ -155,7 +157,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             for j in range(num_eval_episodes):
                 stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=1000,
                                          history_length=history_length, skip_frames=skip_frames,
-                                         normalize_images=normalize_images)[0])
+                                         normalize_images=normalize_images, state_dim=state_dim)[0])
             stats_agg = [stat.episode_reward for stat in stats]
             episode_reward_mean, episode_reward_std = np.mean(stats_agg), np.std(stats_agg)
             print('Validation {} +- {}'.format(episode_reward_mean, episode_reward_std))
@@ -169,8 +171,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             print("Model saved in file: %s" % model_dir)
 
 
-def state_preprocessing(state, normalize=True):
-    image_resized = Image.fromarray(state).resize((42, 42), Image.ANTIALIAS)
+def state_preprocessing(state, height, width, normalize=True):
+    image_resized = Image.fromarray(state).resize((height, width), Image.ANTIALIAS)
     image_resized_bw = rgb2gray(np.array(image_resized))
     if normalize:
         image_resized_bw = image_resized_bw / 255.0
