@@ -28,7 +28,7 @@ maps = {
 @click.option('-K', '--number_replays', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
 @click.option('-lr', '--learning_rate', default=1e-3, type=click.FLOAT)
-@click.option('-ca', '--capacity', default=2 ** 18, type=click.INT)
+@click.option('-ca', '--capacity', default=100000, type=click.INT)
 @click.option('-g', '--gamma', default=0.95, type=click.FLOAT)
 @click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
 @click.option('-t', '--tau', default=0.01, type=click.FLOAT)
@@ -51,7 +51,7 @@ maps = {
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
 @click.option('-i', '--intrinsic', default=True, type=click.BOOL)
 @click.option('-e', '--extrinsic', default=False, type=click.BOOL)
-@click.option('-uq', '--update_q_target', default=1000, type=click.INT,
+@click.option('-uq', '--update_q_target', default=10000, type=click.INT,
               help='How many steps to pass between each q_target update')
 @click.option('-es', '--epsilon_schedule', default=False, type=click.BOOL)
 @click.option('-est', '--epsilon_start', default=0.9, type=click.FLOAT)
@@ -79,8 +79,9 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
         from vizdoom_env.vizdoom_env import DoomEnv
         env = DoomEnv(map_name=map, render=render_training)
         writer = setup_experiment_folder_writer(inspect.currentframe(), name='Vizdoom', log_dir='vizdoom',
-                                                args_for_filename=['algorithm', 'loss_function', 'num_episodes',
-                                                                   'number_replays'])
+                                                args_for_filename=['algorithm', 'environment', 'num_episodes',
+                                                                   'extrinsic', 'intrinsic', 'fixed_encoder',
+                                                                   'soft_update'])
     else:
         if virtual_display:
             if render_training:
