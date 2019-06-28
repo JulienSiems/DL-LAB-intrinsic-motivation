@@ -17,7 +17,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 envs = ['VizDoom', 'Mario', 'GridWorld']
 maps = {
-    envs[0]: ['my_way_home_org', 'my_way_home_spwnhard', 'my_way_home_spwnhard_nogoal']
+    envs[0]: ['my_way_home_spwnhard', 'my_way_home_org', 'my_way_home_spwnhard_nogoal']
 }
 
 
@@ -50,6 +50,8 @@ maps = {
 @click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
 @click.option('-i', '--intrinsic', default=True, type=click.BOOL)
+@click.option('-res', '--residual_icm_forward', default=False, type=click.BOOL)
+@click.option('-ih', '--use_history_in_icm', default=True, type=click.BOOL)
 @click.option('-e', '--extrinsic', default=False, type=click.BOOL)
 @click.option('-uq', '--update_q_target', default=10000, type=click.INT,
               help='How many steps to pass between each q_target update')
@@ -76,7 +78,8 @@ maps = {
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
          epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, environment, map,
          render_training, max_timesteps, normalize_images, non_uniform_sampling, multi_step, multi_step_size,
-         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, extrinsic, update_q_target, epsilon_schedule,
+         mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, residual_icm_forward, use_history_in_icm, extrinsic,
+         update_q_target, epsilon_schedule,
          epsilon_start, epsilon_end, epsilon_decay, virtual_display, seed, pre_intrinsic, experience_replay,
          prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, fixed_encoder, duelling, iqn, iqn_n,
          iqn_np, iqn_k, state_height, state_width):
@@ -140,14 +143,22 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                        duelling=duelling, iqn=iqn).to(device)
 
     # Intrinsic reward networks
-    state_encoder = Encoder(history_length=history_length).to(device)
+    if use_history_in_icm:
+        encoder_in_channels = history_length
+    else:
+        encoder_in_channels = 1
+
+    state_encoder = Encoder(history_length=encoder_in_channels).to(device)
     inverse_dynamics_model = InverseModel(num_actions=num_actions).to(device)
     forward_dynamics_model = ForwardModel(num_actions=num_actions).to(device)
 
     intrinsic_reward_network = IntrinsicRewardGenerator(state_encoder=state_encoder,
                                                         inverse_dynamics_model=inverse_dynamics_model,
                                                         forward_dynamics_model=forward_dynamics_model,
-                                                        num_actions=num_actions, fixed_encoder=fixed_encoder)
+                                                        num_actions=num_actions,
+                                                        fixed_encoder=fixed_encoder,
+                                                        residual_forward=residual_icm_forward,
+                                                        use_history=use_history_in_icm)
 
     agent = DQNAgent(Q=Q_net, Q_target=Q_target_net, intrinsic_reward_generator=intrinsic_reward_network,
                      num_actions=num_actions, gamma=gamma, batch_size=batch_size, tau=tau, epsilon=epsilon,

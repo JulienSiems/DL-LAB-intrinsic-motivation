@@ -155,22 +155,22 @@ class DeepQNetwork(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__(self, history_length):
+    def __init__(self, history_length, filters=32):
         super(Encoder, self).__init__()
         self.conv1 = nn.Sequential(
-            nn.Conv2d(history_length, 32, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(history_length, filters, kernel_size=3, stride=2, padding=1),
             nn.ELU()
         )
         self.conv2 = nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(filters, filters, kernel_size=3, stride=2, padding=1),
             nn.ELU()
         )
         self.conv3 = nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(filters, filters, kernel_size=3, stride=2, padding=1),
             nn.ELU()
         )
         self.conv4 = nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(filters, filters, kernel_size=3, stride=2, padding=1),
             nn.ELU()
         )
 
