@@ -28,7 +28,7 @@ maps = {
 @click.option('-K', '--number_replays', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
 @click.option('-lr', '--learning_rate', default=1e-3, type=click.FLOAT)
-@click.option('-ca', '--capacity', default=100000, type=click.INT)
+@click.option('-ca', '--capacity', default=2**17, type=click.INT)
 @click.option('-g', '--gamma', default=0.95, type=click.FLOAT)
 @click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
 @click.option('-t', '--tau', default=0.01, type=click.FLOAT)
