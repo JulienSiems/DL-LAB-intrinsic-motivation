@@ -95,26 +95,27 @@ class DeepQNetwork(nn.Module):
 
         dummy_input = torch.zeros(1, in_dim[0], in_dim[1], in_dim[2])
         out_cnn = self.conv3(self.conv2(self.conv1(dummy_input)))
-        cnn_out_dim = out_cnn.view(out_cnn.size(0), -1).shape[1]
+        self.cnn_out_dim = out_cnn.view(out_cnn.size(0), -1).shape[1]
 
         if iqn:
-            raise NotImplemented('IQN not ready yet.')
-            self.n_range_pi = torch.arange(start=0, end=self.embedding_dim, dtype=torch.float32) * math.pi
+            raise NotImplemented('IQN not fully implemented yet.')
+            # precompute pi * i for 0 <= i < n from eq. 4 of IQN paper
+            self.n_range_pi = torch.arange(start=0, end=self.embedding_dim, dtype=torch.float32).view(1, -1) * math.pi
             self.iqn_phi = nn.Sequential(
-                nn.Linear(self.embedding_dim, cnn_out_dim, bias=True),
+                nn.Linear(self.embedding_dim, self.cnn_out_dim, bias=True),
                 activation()
             )
 
         if duelling:
             self.fc1_val = nn.Sequential(
-                nn.Linear(cnn_out_dim, self.hidden_dim, bias=True),
+                nn.Linear(self.cnn_out_dim, self.hidden_dim, bias=True),
                 activation()
             )
             self.fc2_val = nn.Sequential(
                 nn.Linear(self.hidden_dim, 1, bias=True)
             )
             self.fc1_adv = nn.Sequential(
-                nn.Linear(cnn_out_dim, self.hidden_dim, bias=True),
+                nn.Linear(self.cnn_out_dim, self.hidden_dim, bias=True),
                 activation()
             )
             self.fc2_adv = nn.Sequential(
@@ -122,7 +123,7 @@ class DeepQNetwork(nn.Module):
             )
         else:
             self.fc1 = nn.Sequential(
-                nn.Linear(cnn_out_dim, self.hidden_dim, bias=True),
+                nn.Linear(self.cnn_out_dim, self.hidden_dim, bias=True),
                 activation()
             )
             self.fc2 = nn.Sequential(
@@ -133,14 +134,21 @@ class DeepQNetwork(nn.Module):
             if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight)
 
-    def forward(self, x, tau=None, *args, **kwargs):
+    def forward(self, x, taus=None, *args, **kwargs):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
         x = x.view(x.size(0), -1)
 
         if self.iqn:
-            pass
+            # taus need to be of shape (batch_size, num_taus)
+            batch_size, num_taus = taus.shape
+            # flatten taus to shape (batch_size * num_taus, 1)
+            taus = taus.view(-1, 1)
+            taus_embedded = torch.cos(taus * self.n_range_pi)
+            iqn_phi_out = self.iqn_phi(taus_embedded)
+            x_repeated = x.repeat(1, num_taus).view(-1, self.cnn_out_dim)
+            x = x_repeated * iqn_phi_out
 
         if self.duelling:
             x_val = self.fc1_val(x)

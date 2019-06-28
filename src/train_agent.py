@@ -66,13 +66,14 @@ maps = {
 @click.option('-per_a', '--prio_er_alpha', default=0.6, type=click.FLOAT)
 @click.option('-per_bs', '--prio_er_beta_start', default=0.4, type=click.FLOAT)
 @click.option('-per_be', '--prio_er_beta_end', default=1.0, type=click.FLOAT)
-@click.option('-per_bdc', '--prio_er_beta_decay', default=30000, type=click.INT)
+@click.option('-per_bdc', '--prio_er_beta_decay', default=250000, type=click.INT)
 @click.option('-fe', '--fixed_encoder', default=False, type=click.BOOL)
 @click.option('-du', '--duelling', default=False, type=click.BOOL)
 @click.option('-iqn', '--iqn', default=False, type=click.BOOL)
 @click.option('-iqn_n', '--iqn_n', default=32, type=click.INT)
 @click.option('-iqn_np', '--iqn_np', default=32, type=click.INT)
 @click.option('-iqn_k', '--iqn_k', default=32, type=click.INT)
+@click.option('-iqn_ted', '--iqn_tau_embed_dim', default=64, type=click.INT)
 @click.option('-sh', '--state_height', default=42, type=click.INT)
 @click.option('-sw', '--state_width', default=42, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
@@ -82,7 +83,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
          update_q_target, epsilon_schedule,
          epsilon_start, epsilon_end, epsilon_decay, virtual_display, seed, pre_intrinsic, experience_replay,
          prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, fixed_encoder, duelling, iqn, iqn_n,
-         iqn_np, iqn_k, state_height, state_width):
+         iqn_np, iqn_k, iqn_tau_embed_dim, state_height, state_width):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
@@ -138,9 +139,9 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
         raise ValueError('{} not implemented'.format(model))
 
     Q_net = CNN(in_dim=state_dim, num_actions=num_actions, history_length=history_length,
-                duelling=duelling, iqn=iqn).to(device)
+                duelling=duelling, iqn=iqn, embedding_dim=iqn_tau_embed_dim).to(device)
     Q_target_net = CNN(in_dim=state_dim, num_actions=num_actions, history_length=history_length,
-                       duelling=duelling, iqn=iqn).to(device)
+                       duelling=duelling, iqn=iqn, embedding_dim=iqn_tau_embed_dim).to(device)
 
     # Intrinsic reward networks
     if use_history_in_icm:
@@ -170,7 +171,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
                      epsilon_start=epsilon_start, epsilon_end=epsilon_end, epsilon_decay=epsilon_decay,
                      extrinsic=extrinsic, pre_intrinsic=pre_intrinsic, experience_replay=experience_replay,
                      prio_er_alpha=prio_er_alpha, prio_er_beta_start=prio_er_beta_start,
-                     prio_er_beta_end=prio_er_beta_end, prio_er_beta_decay=prio_er_beta_decay, state_dim=state_dim)
+                     prio_er_beta_end=prio_er_beta_end, prio_er_beta_decay=prio_er_beta_decay, state_dim=state_dim,
+                     iqn=iqn, iqn_n=iqn_n, iqn_np=iqn_np, iqn_k=iqn_k)
 
     train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
                  num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,

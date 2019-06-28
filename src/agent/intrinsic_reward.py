@@ -5,7 +5,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class IntrinsicRewardGenerator:
-    def __init__(self, state_encoder, inverse_dynamics_model, forward_dynamics_model, num_actions, fixed_encoder, residual_forward, use_history):
+    def __init__(self, state_encoder, inverse_dynamics_model, forward_dynamics_model, num_actions, fixed_encoder,
+                 residual_forward, use_history):
         self.state_encoder = state_encoder
         self.inverse_dynamics_model = inverse_dynamics_model
         self.forward_dynamics_model = forward_dynamics_model
@@ -16,8 +17,8 @@ class IntrinsicRewardGenerator:
 
     def compute_intrinsic_reward(self, state, action, next_state):
         if not self.use_history:
-            state = np.expand_dims(state[:, -1, :, :],axis=1)
-            next_state = np.expand_dims(next_state[:, -1, :, :],axis=1)
+            state = np.expand_dims(state[:, -1, :, :], axis=1)
+            next_state = np.expand_dims(next_state[:, -1, :, :], axis=1)
 
         phi_s_t = self.state_encoder(torch.from_numpy(state).to(device).float())  # [BS, 288]
         phi_s_tp1 = self.state_encoder(torch.from_numpy(next_state).to(device).float())  # [BS, 288]

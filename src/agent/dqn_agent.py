@@ -18,9 +18,10 @@ class DQNAgent:
     def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, intrinsic, extrinsic,
                  mu, beta, lambda_intrinsic, epsilon_start, epsilon_end, epsilon_decay, update_q_target,
                  experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, state_dim,
+                 iqn, iqn_n, iqn_np, iqn_k,
                  multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95, batch_size=64, epsilon=0.1,
                  tau=0.01, lr=1e-4, number_replays=10, loss_function='L1', soft_update=False, algorithm='DQN',
-                 epsilon_schedule=False, pre_intrinsic=False, **kwargs):
+                 epsilon_schedule=False, pre_intrinsic=False, *args, **kwargs):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -31,7 +32,7 @@ class DQNAgent:
             num_actions: Number of actions of the environment.
             gamma: discount factor of future rewards.
             batch_size: Number of samples per batch.
-            tao: indicates the speed of adjustment of the slowly updated target network.
+            tau: indicates the speed of adjustment of the slowly updated target network.
             epsilon: Chance to sample a random action. Float betwen 0 and 1.
             lr: learning rate of the optimizer
         """
@@ -101,6 +102,11 @@ class DQNAgent:
         self.n_steps = multi_step_size
         self.multi_step = multi_step
 
+        self.iqn = iqn
+        self.iqn_n = iqn_n
+        self.iqn_np = iqn_np
+        self.iqn_k = iqn_k
+
         if loss_function == 'L1':
             self.loss_function = torch.nn.SmoothL1Loss()
         elif loss_function == 'L2':
@@ -157,9 +163,9 @@ class DQNAgent:
             non_final_mask = torch.from_numpy(np.array(batch_dones != True, dtype=np.uint8))
             non_final_next_states = torch.from_numpy(batch_next_states)[non_final_mask].to(device).float()
 
-            #       2.1 compute td targets and loss
-            #              td_target =  reward + discount * max_a Q_target(next_state_batch, a)
-            next_state_values = torch.zeros(self.batch_size, device=device)
+            # 2.1 compute td targets and loss
+            # td_target =  reward + discount * max_a Q_target(next_state_batch, a)
+            next_state_values = torch.zeros(self.batch_size, device=device, dtype=torch.float)
             if 'DQN' == self.algorithm:
                 next_state_values[non_final_mask] = torch.max(self.Q_target(non_final_next_states), dim=1)[0]
             elif 'DDQN' == self.algorithm:
@@ -186,10 +192,9 @@ class DQNAgent:
             if self.extrinsic or self.pre_intrinsic:
                 extrinsic_reward = torch.from_numpy(batch_rewards).to(device).float()
             else:
-                extrinsic_reward = 0
+                extrinsic_reward = 0.0
 
-            # print(intrinsic_reward[0])
-            reward = extrinsic_reward + (intrinsic_reward if not self.pre_intrinsic else 0)
+            reward = extrinsic_reward + (intrinsic_reward if not self.pre_intrinsic else 0.0)
 
             # Detach from comp graph to avoid that gradients are propagated through the target network.
             next_state_values = next_state_values.detach()
@@ -198,8 +203,8 @@ class DQNAgent:
             else:
                 td_target = reward + self.gamma * next_state_values
 
-            #       2.2 update the Q network
-            #              self.Q.update(...)
+            # 2.2 update the Q network
+            # self.Q.update(...)
             state_action_values = self.Q(torch.from_numpy(batch_states).to(device).float())
             batch_actions_tensor = torch.from_numpy(batch_actions).to(device).view(-1, 1)
 
@@ -257,18 +262,21 @@ class DQNAgent:
         if deterministic or sample > eps_threshold:
             with torch.no_grad():
                 # take greedy action (argmax)
-                action_soft = self.Q(torch.from_numpy(np.expand_dims(state, 0)).to(device).float())
-                action_id = torch.argmax(action_soft).detach().cpu().numpy()
+                state_ = torch.from_numpy(np.expand_dims(state, 0)).to(device).float()
+                if self.iqn:
+                    # for IQN we have to sample from reward distribution to determine greedy action
+                    taus = torch.rand(size=(1, self.iqn_k), dtype=torch.float, device=device)
+                    pred = self.Q(state_, taus=taus)
+                    action_id = torch.argmax(pred.mean(dim=0)).detach().cpu().numpy()
+                else:
+                    pred = self.Q(state_)
+                    action_id = torch.argmax(pred).detach().cpu().numpy()
         else:
             if self.non_uniform_sampling:
                 action_id = \
                     np.random.choice(self.num_actions, 1, p=[0.45, 0.15, 0.15, 0.15, 0.1])[0]
             else:
                 action_id = np.random.randint(self.num_actions)
-            # TODO: sample random action
-            # Hint for the exploration in CarRacing: sampling the action from a uniform distribution will probably not work. 
-            # You can sample the agents actions with different probabilities (need to sum up to 1) so that the agent will prefer to accelerate or going straight.
-            # To see how the agent explores, turn the rendering in the training on and look what the agent is doing.
         return action_id
 
     def save(self, file_name):
