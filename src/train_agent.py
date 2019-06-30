@@ -36,7 +36,7 @@ maps = {
 @click.option('-hl', '--history_length', default=4, type=click.INT)
 @click.option('-sf', '--skip_frames', default=3, type=click.INT)
 @click.option('-lf', '--loss_function', default='L2', type=click.Choice(['L1', 'L2']))
-@click.option('-al', '--algorithm', default='DDQN', type=click.Choice(['DQN', 'DDQN']))
+@click.option('-ddqn', '--ddqn', default=False, type=click.BOOL)
 @click.option('-mo', '--model', default='DeepQNetwork', type=click.Choice(['Resnet', 'Lenet', 'DeepQNetwork']))
 @click.option('-env', '--environment', default=envs[0], type=click.Choice(envs))
 @click.option('-mp', '--map', default=maps[envs[0]][0], type=click.Choice(maps[envs[0]]))
@@ -77,7 +77,7 @@ maps = {
 @click.option('-sh', '--state_height', default=42, type=click.INT)
 @click.option('-sw', '--state_width', default=42, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
-         epsilon, tau, soft_update, history_length, skip_frames, loss_function, algorithm, model, environment, map,
+         epsilon, tau, soft_update, history_length, skip_frames, loss_function, ddqn, model, environment, map,
          render_training, max_timesteps, normalize_images, non_uniform_sampling, multi_step, multi_step_size,
          mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, residual_icm_forward, use_history_in_icm, extrinsic,
          update_q_target, epsilon_schedule,
@@ -91,9 +91,9 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
         from vizdoom_env.vizdoom_env import DoomEnv
         env = DoomEnv(map_name=map, render=render_training)
         writer = setup_experiment_folder_writer(inspect.currentframe(), name='Vizdoom', log_dir='vizdoom',
-                                                args_for_filename=['algorithm', 'environment', 'num_episodes',
-                                                                   'extrinsic', 'intrinsic', 'fixed_encoder',
-                                                                   'soft_update'])
+                                                args_for_filename=['environment', 'extrinsic', 'intrinsic',
+                                                                   'fixed_encoder', 'ddqn', 'duelling', 'iqn',
+                                                                   'experience_replay', 'soft_update'])
     else:
         if virtual_display:
             if render_training:
@@ -109,18 +109,20 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
             # env = retro.make(game='SuperMarioBros-Nes')
             env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
             env = JoypadSpace(env, COMPLEX_MOVEMENT)
-            writer = setup_experiment_folder_writer(inspect.currentframe(), name='Mario', log_dir='Mario',
-                                                    args_for_filename=['algorithm', 'loss_function', 'num_episodes',
-                                                                       'number_replays'])
+            writer = setup_experiment_folder_writer(inspect.currentframe(), name='Mario', log_dir='mario',
+                                                    args_for_filename=['environment', 'extrinsic', 'intrinsic',
+                                                                       'fixed_encoder', 'ddqn', 'duelling', 'iqn',
+                                                                       'experience_replay', 'soft_update'])
         elif environment == envs[2]:
             import gym_minigrid
             from src.train_gridworld import ClassicalGridworldWrapper
             grid_size = 100
             env = gym_minigrid.envs.EmptyEnv(size=grid_size)
             env = ClassicalGridworldWrapper(env)
-            writer = setup_experiment_folder_writer(inspect.currentframe(), name='GridWorld', log_dir='GridWorld',
-                                                    args_for_filename=['algorithm', 'loss_function', 'num_episodes',
-                                                                       'number_replays'])
+            writer = setup_experiment_folder_writer(inspect.currentframe(), name='GridWorld', log_dir='gridworld',
+                                                    args_for_filename=['environment', 'extrinsic', 'intrinsic',
+                                                                       'fixed_encoder', 'ddqn', 'duelling', 'iqn',
+                                                                       'experience_replay', 'soft_update'])
         else:
             raise NotImplementedError()
 
@@ -164,7 +166,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     agent = DQNAgent(Q=Q_net, Q_target=Q_target_net, intrinsic_reward_generator=intrinsic_reward_network,
                      num_actions=num_actions, gamma=gamma, batch_size=batch_size, tau=tau, epsilon=epsilon,
                      lr=learning_rate, capacity=capacity, number_replays=number_replays, loss_function=loss_function,
-                     soft_update=soft_update, algorithm=algorithm, multi_step=multi_step,
+                     soft_update=soft_update, ddqn=ddqn, multi_step=multi_step,
                      multi_step_size=multi_step_size, non_uniform_sampling=non_uniform_sampling,
                      epsilon_schedule=epsilon_schedule, mu=mu_intrinsic, beta=beta_intrinsic,
                      update_q_target=update_q_target, lambda_intrinsic=lambda_intrinsic, intrinsic=intrinsic,

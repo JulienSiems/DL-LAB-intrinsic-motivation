@@ -20,7 +20,7 @@ class DQNAgent:
                  experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, state_dim,
                  iqn, iqn_n, iqn_np, iqn_k,
                  multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95, batch_size=64, epsilon=0.1,
-                 tau=0.01, lr=1e-4, number_replays=10, loss_function='L1', soft_update=False, algorithm='DQN',
+                 tau=0.01, lr=1e-4, number_replays=10, loss_function='L1', soft_update=False, ddqn=True,
                  epsilon_schedule=False, pre_intrinsic=False, *args, **kwargs):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
@@ -91,7 +91,7 @@ class DQNAgent:
         self.soft_update = soft_update
         self.non_uniform_sampling = non_uniform_sampling
 
-        self.algorithm = algorithm
+        self.ddqn = ddqn
 
         self.epsilon_schedule = epsilon_schedule
         self.epsilon_start = epsilon_start
@@ -166,16 +166,14 @@ class DQNAgent:
             # 2.1 compute td targets and loss
             # td_target =  reward + discount * max_a Q_target(next_state_batch, a)
             next_state_values = torch.zeros(self.batch_size, device=device, dtype=torch.float)
-            if 'DQN' == self.algorithm:
-                next_state_values[non_final_mask] = torch.max(self.Q_target(non_final_next_states), dim=1)[0]
-            elif 'DDQN' == self.algorithm:
+            if self.ddqn:
                 # Double DQN
                 # Adapted from https://github.com/Shivanshu-Gupta/Pytorch-Double-DQN/blob/master/agent.py
                 next_state_actions = self.Q(non_final_next_states).max(dim=1)[1]
                 next_state_values[non_final_mask] = \
                     self.Q_target(non_final_next_states).gather(dim=1, index=next_state_actions.view(-1, 1)).squeeze(1)
             else:
-                raise ValueError('Algorithm {} not implemented'.format(self.algorithm))
+                next_state_values[non_final_mask] = torch.max(self.Q_target(non_final_next_states), dim=1)[0]
 
             if self.intrinsic:
                 # Compute intrinsic_reward
