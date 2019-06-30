@@ -153,9 +153,9 @@ class DQNAgent:
             batch_dones = batch_dones[:, 0]
             weights = torch.from_numpy(weights).detach().to(device)
 
-            batch_states_t = torch.from_numpy(batch_states).to(device)
-            batch_next_states_t = torch.from_numpy(batch_next_states).to(device)
-            batch_actions_t = torch.from_numpy(batch_actions).long().to(device).view(-1, 1)
+            batch_states_ = torch.from_numpy(batch_states).to(device)
+            batch_next_states_ = torch.from_numpy(batch_next_states).to(device)
+            batch_actions_ = torch.from_numpy(batch_actions).long().to(device).view(-1, 1)
 
             # compute mask that weighs values of terminated next states with zero.
             non_final_mask = torch.from_numpy(np.array(batch_dones != True, dtype=np.float32)).to(device)
@@ -164,18 +164,20 @@ class DQNAgent:
                 # when using IQN, net outputs are of shape (batch_size * num_taus, num_actions)
                 taus = torch.rand(size=(self.batch_size, self.iqn_n), dtype=torch.float, device=device)
                 taus_prime = torch.rand(size=(self.batch_size, self.iqn_np), dtype=torch.float, device=device)
-                taus_tilde = torch.rand(size=(self.batch_size, self.iqn_k), dtype=torch.float, device=device)
+                taus_tilde = torch.linspace(start=0.0, end=1.0, steps=self.iqn_k + 2, dtype=torch.float, device=device)
+                taus_tilde = taus_tilde[1:-1].view(1, self.iqn_k).repeat(self.batch_size, 1)
+                # taus_tilde = torch.rand(size=(self.batch_size, self.iqn_k), dtype=torch.float, device=device)
                 # predict value of taken action.
-                Q_pred = self.Q(batch_states_t, taus=taus)
-                batch_actions_t_repeated = batch_actions_t.repeat(1, self.iqn_n).view(-1, 1)
-                Q_pred_picked = Q_pred.gather(dim=1, index=batch_actions_t_repeated).squeeze()
+                Q_pred = self.Q(batch_states_, taus=taus)
+                batch_actions_repeated = batch_actions_.repeat(1, self.iqn_n).view(-1, 1)
+                Q_pred_picked = Q_pred.gather(dim=1, index=batch_actions_repeated).squeeze()
                 # predict value of best action in next state.
-                Q_target_pred_next = self.Q_target(batch_next_states_t, taus=taus_prime)
+                Q_target_pred_next = self.Q_target(batch_next_states_, taus=taus_prime)
                 if self.ddqn:
-                    pred_next_to_max = self.Q(batch_next_states_t, taus=taus_tilde)
+                    pred_next_to_max = self.Q(batch_next_states_, taus=taus_tilde)
                 else:
-                    pred_next_to_max = self.Q_target(batch_next_states_t, taus=taus_tilde)
-                pred_next_to_max = pred_next_to_max.view(self.batch_size, self.iqn_k, -1)
+                    pred_next_to_max = self.Q_target(batch_next_states_, taus=taus_tilde)
+                pred_next_to_max = pred_next_to_max.view(self.batch_size, self.iqn_k, self.num_actions)
                 max_next_actions = torch.max(pred_next_to_max.mean(dim=1), dim=1)[1]
                 max_next_actions_repeated = max_next_actions.view(-1, 1).repeat(1, self.iqn_np).view(-1, 1)
                 Q_target_pred_next_picked = Q_target_pred_next.gather(dim=1, index=max_next_actions_repeated).squeeze()
@@ -183,12 +185,12 @@ class DQNAgent:
                 Q_target_pred_next_picked = Q_target_pred_next_picked * non_final_mask_repeated
             else:
                 # predict value of taken action.
-                Q_pred = self.Q(batch_states_t)
-                Q_pred_picked = Q_pred.gather(dim=1, index=batch_actions_t).squeeze()
+                Q_pred = self.Q(batch_states_)
+                Q_pred_picked = Q_pred.gather(dim=1, index=batch_actions_).squeeze()
                 # predict value of best action in next state.
-                Q_target_pred_next = self.Q_target(batch_next_states_t)
+                Q_target_pred_next = self.Q_target(batch_next_states_)
                 if self.ddqn:
-                    pred_next_to_max = self.Q(batch_next_states_t)
+                    pred_next_to_max = self.Q(batch_next_states_)
                 else:
                     pred_next_to_max = Q_target_pred_next
                 max_next_actions = torch.max(pred_next_to_max, dim=1)[1].view(-1, 1)
@@ -299,7 +301,10 @@ class DQNAgent:
                 state_ = torch.from_numpy(np.expand_dims(state, 0)).to(device).float()
                 if self.iqn:
                     # for IQN we have to sample from reward distribution to determine greedy action
-                    taus = torch.rand(size=(1, self.iqn_k), dtype=torch.float, device=device)
+                    # we evaluate q net at grid points of a linspace ranging from 0.0 to 1.0.
+                    taus = torch.linspace(start=0.0, end=1.0, steps=self.iqn_k + 2, dtype=torch.float, device=device)
+                    taus = taus[1:-1].view(1, self.iqn_k)
+                    # taus = torch.rand(size=(1, self.iqn_k), dtype=torch.float, device=device)
                     pred = self.Q(state_, taus=taus)
                     action_id = torch.argmax(pred.mean(dim=0)).detach().cpu().numpy()
                 else:

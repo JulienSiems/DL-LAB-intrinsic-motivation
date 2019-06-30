@@ -71,7 +71,7 @@ maps = {
 @click.option('-iqn', '--iqn', default=False, type=click.BOOL)
 @click.option('-iqn_n', '--iqn_n', default=32, type=click.INT)
 @click.option('-iqn_np', '--iqn_np', default=32, type=click.INT)
-@click.option('-iqn_k', '--iqn_k', default=32, type=click.INT)
+@click.option('-iqn_k', '--iqn_k', default=64, type=click.INT)
 @click.option('-iqn_ted', '--iqn_tau_embed_dim', default=64, type=click.INT)
 @click.option('-hk', '--huber_kappa', default=1.0, type=click.FLOAT)
 @click.option('-sh', '--state_height', default=42, type=click.INT)
