@@ -166,15 +166,15 @@ class DQNAgent:
                 taus_prime = torch.rand(size=(self.batch_size, self.iqn_np), dtype=torch.float, device=device)
                 taus_tilde = torch.rand(size=(self.batch_size, self.iqn_k), dtype=torch.float, device=device)
                 # predict value of taken action.
-                Q_pred = self.Q(batch_states_t, taus)
+                Q_pred = self.Q(batch_states_t, taus=taus)
                 batch_actions_t_repeated = batch_actions_t.repeat(1, self.iqn_n).view(-1, 1)
                 Q_pred_picked = Q_pred.gather(dim=1, index=batch_actions_t_repeated).squeeze()
                 # predict value of best action in next state.
-                Q_target_pred_next = self.Q_target(batch_next_states_t, taus_prime)
+                Q_target_pred_next = self.Q_target(batch_next_states_t, taus=taus_prime)
                 if self.ddqn:
-                    pred_next_to_max = self.Q(batch_next_states_t, taus_tilde)
+                    pred_next_to_max = self.Q(batch_next_states_t, taus=taus_tilde)
                 else:
-                    pred_next_to_max = self.Q_target(batch_next_states_t, taus_tilde)
+                    pred_next_to_max = self.Q_target(batch_next_states_t, taus=taus_tilde)
                 pred_next_to_max = pred_next_to_max.view(self.batch_size, self.iqn_k, -1)
                 max_next_actions = torch.max(pred_next_to_max.mean(dim=1), dim=1)[1]
                 max_next_actions_repeated = max_next_actions.view(-1, 1).repeat(1, self.iqn_np).view(-1, 1)

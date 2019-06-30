@@ -6,6 +6,8 @@ import torch
 
 import math
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 """
 CartPole network
@@ -99,7 +101,8 @@ class DeepQNetwork(nn.Module):
 
         if iqn:
             # precompute pi * i for 0 <= i < n from eq. 4 of IQN paper
-            self.n_range_pi = torch.arange(start=0, end=self.embedding_dim, dtype=torch.float32).view(1, -1) * math.pi
+            self.n_range_pi = \
+                torch.arange(start=0, end=self.embedding_dim, dtype=torch.float32, device=device).view(1, -1) * math.pi
             self.iqn_phi = nn.Sequential(
                 nn.Linear(self.embedding_dim, self.cnn_out_dim, bias=True),
                 activation()
