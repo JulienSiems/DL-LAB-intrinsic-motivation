@@ -22,7 +22,7 @@ maps = {
 
 
 @click.command()
-@click.option('-ne', '--num_episodes', default=1000, type=click.INT, help='train for ... episodes')
+@click.option('-ne', '--num_episodes', default=10000, type=click.INT, help='train for ... episodes')
 @click.option('-ec', '--eval_cycle', default=50, type=click.INT, help='evaluate every ... episodes')
 @click.option('-ne', '--num_eval_episodes', default=1, type=click.INT, help='evaluate this many epochs')
 @click.option('-K', '--number_replays', default=1, type=click.INT)
