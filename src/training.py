@@ -134,6 +134,9 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                 writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, objects),
                                   global_step=i)
                 writer.add_scalar('num_visited_sectors', len(visited_sectors), global_step=i)
+                writer.add_histogram('visited_sector_ids', [i for i in range(len(env.state.sectors)) if
+                                                            'sector_{}'.format(i) in visited_sectors.keys()],
+                                     global_step=i)
             else:
                 writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, None),
                                   global_step=i)

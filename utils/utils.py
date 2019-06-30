@@ -56,6 +56,8 @@ def setup_experiment_folder_writer(frame, name, log_dir=None, args_for_filename=
     config_dict = {arg: values[arg] for arg in args}
     with open(os.path.join(writer.logdir, 'config.json'), 'w') as fp:
         json.dump(config_dict, fp)
+    # Add config as text summary
+    writer.add_text('config', str(config_dict), global_step=0)
     return writer
 
 
