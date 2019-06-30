@@ -98,7 +98,6 @@ class DeepQNetwork(nn.Module):
         self.cnn_out_dim = out_cnn.view(out_cnn.size(0), -1).shape[1]
 
         if iqn:
-            raise NotImplemented('IQN not fully implemented yet.')
             # precompute pi * i for 0 <= i < n from eq. 4 of IQN paper
             self.n_range_pi = torch.arange(start=0, end=self.embedding_dim, dtype=torch.float32).view(1, -1) * math.pi
             self.iqn_phi = nn.Sequential(

@@ -18,10 +18,10 @@ class DQNAgent:
     def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, intrinsic, extrinsic,
                  mu, beta, lambda_intrinsic, epsilon_start, epsilon_end, epsilon_decay, update_q_target,
                  experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, state_dim,
-                 iqn, iqn_n, iqn_np, iqn_k,
+                 iqn, iqn_n, iqn_np, iqn_k, huber_kappa,
                  multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95, batch_size=64, epsilon=0.1,
-                 tau=0.01, lr=1e-4, number_replays=10, loss_function='L1', soft_update=False, ddqn=True,
-                 epsilon_schedule=False, pre_intrinsic=False, *args, **kwargs):
+                 tau=0.01, lr=1e-4, number_replays=10, soft_update=False, ddqn=True, epsilon_schedule=False,
+                 pre_intrinsic=False, *args, **kwargs):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -106,13 +106,7 @@ class DQNAgent:
         self.iqn_n = iqn_n
         self.iqn_np = iqn_np
         self.iqn_k = iqn_k
-
-        if loss_function == 'L1':
-            self.loss_function = torch.nn.SmoothL1Loss()
-        elif loss_function == 'L2':
-            self.loss_function = torch.nn.MSELoss()
-        else:
-            raise ValueError('Loss function {} not implemented.'.format(loss_function))
+        self.huber_kappa = huber_kappa
 
     # Adapated from https://github.com/qfettes/DeepRL-Tutorials/blob/master/02.NStep_DQN.ipynb
     def append_to_replay(self, state, action, next_state, reward, terminal, beginning, priority):
@@ -147,8 +141,8 @@ class DQNAgent:
             return None, None, None, None
 
         for iter in range(self.number_replays):
-            # 2. sample next batch and perform batch update: (initially take less than batch_size because of the replay
-            # buffer
+            self.optimizer.zero_grad()
+
             batch_state_sequences, batch_actions, batch_rewards, batch_dones, _, weights, sample_idxs = \
                 self.replay_buffer.sample_batch(self.batch_size, history_length=1, n_steps=1,
                                                 beta=self.cur_prio_er_beta, balance_batch=True)
@@ -159,21 +153,50 @@ class DQNAgent:
             batch_dones = batch_dones[:, 0]
             weights = torch.from_numpy(weights).detach().to(device)
 
-            # Set the expected value of a terminated section to zero.
-            non_final_mask = torch.from_numpy(np.array(batch_dones != True, dtype=np.uint8))
-            non_final_next_states = torch.from_numpy(batch_next_states)[non_final_mask].to(device).float()
+            batch_states_t = torch.from_numpy(batch_states).to(device)
+            batch_next_states_t = torch.from_numpy(batch_next_states).to(device)
+            batch_actions_t = torch.from_numpy(batch_actions).long().to(device).view(-1, 1)
 
-            # 2.1 compute td targets and loss
-            # td_target =  reward + discount * max_a Q_target(next_state_batch, a)
-            next_state_values = torch.zeros(self.batch_size, device=device, dtype=torch.float)
-            if self.ddqn:
-                # Double DQN
-                # Adapted from https://github.com/Shivanshu-Gupta/Pytorch-Double-DQN/blob/master/agent.py
-                next_state_actions = self.Q(non_final_next_states).max(dim=1)[1]
-                next_state_values[non_final_mask] = \
-                    self.Q_target(non_final_next_states).gather(dim=1, index=next_state_actions.view(-1, 1)).squeeze(1)
+            # compute mask that weighs values of terminated next states with zero.
+            non_final_mask = torch.from_numpy(np.array(batch_dones != True, dtype=np.float32)).to(device)
+
+            if self.iqn:
+                # when using IQN, net outputs are of shape (batch_size * num_taus, num_actions)
+                taus = torch.rand(size=(self.batch_size, self.iqn_n), dtype=torch.float, device=device)
+                taus_prime = torch.rand(size=(self.batch_size, self.iqn_np), dtype=torch.float, device=device)
+                taus_tilde = torch.rand(size=(self.batch_size, self.iqn_k), dtype=torch.float, device=device)
+                # predict value of taken action.
+                Q_pred = self.Q(batch_states_t, taus)
+                batch_actions_t_repeated = batch_actions_t.repeat(1, self.iqn_n).view(-1, 1)
+                Q_pred_picked = Q_pred.gather(dim=1, index=batch_actions_t_repeated).squeeze()
+                # predict value of best action in next state.
+                Q_target_pred_next = self.Q_target(batch_next_states_t, taus_prime)
+                if self.ddqn:
+                    pred_next_to_max = self.Q(batch_next_states_t, taus_tilde)
+                else:
+                    pred_next_to_max = self.Q_target(batch_next_states_t, taus_tilde)
+                pred_next_to_max = pred_next_to_max.view(self.batch_size, self.iqn_k, -1)
+                max_next_actions = torch.max(pred_next_to_max.mean(dim=1), dim=1)[1]
+                max_next_actions_repeated = max_next_actions.view(-1, 1).repeat(1, self.iqn_np).view(-1, 1)
+                Q_target_pred_next_picked = Q_target_pred_next.gather(dim=1, index=max_next_actions_repeated).squeeze()
+                non_final_mask_repeated = non_final_mask.view(-1, 1).repeat(1, self.iqn_np).flatten()
+                Q_target_pred_next_picked = Q_target_pred_next_picked * non_final_mask_repeated
             else:
-                next_state_values[non_final_mask] = torch.max(self.Q_target(non_final_next_states), dim=1)[0]
+                # predict value of taken action.
+                Q_pred = self.Q(batch_states_t)
+                Q_pred_picked = Q_pred.gather(dim=1, index=batch_actions_t).squeeze()
+                # predict value of best action in next state.
+                Q_target_pred_next = self.Q_target(batch_next_states_t)
+                if self.ddqn:
+                    pred_next_to_max = self.Q(batch_next_states_t)
+                else:
+                    pred_next_to_max = Q_target_pred_next
+                max_next_actions = torch.max(pred_next_to_max, dim=1)[1].view(-1, 1)
+                Q_target_pred_next_picked = Q_target_pred_next.gather(dim=1, index=max_next_actions).squeeze()
+                Q_target_pred_next_picked = Q_target_pred_next_picked * non_final_mask
+
+            # detach from comp graph to avoid that gradients are propagated through the target network.
+            Q_target_pred_next_picked = Q_target_pred_next_picked.detach()
 
             if self.intrinsic:
                 # Compute intrinsic_reward
@@ -181,7 +204,9 @@ class DQNAgent:
                     state=batch_states,
                     action=batch_actions,
                     next_state=batch_next_states)
+                # this is not detached because it is used to optimise the forward model.
                 r_i = intrinsic_reward
+                # this is detached because it's used for the reward to optimise the Q model.
                 intrinsic_reward = intrinsic_reward.detach() * self.mu
             else:
                 L_I, L_F, intrinsic_reward, l_i = \
@@ -193,27 +218,38 @@ class DQNAgent:
                 extrinsic_reward = 0.0
 
             reward = extrinsic_reward + (intrinsic_reward if not self.pre_intrinsic else 0.0)
+            if self.iqn:
+                reward = reward.view(-1, 1).repeat(1, self.iqn_np).view(-1, 1).squeeze()
 
-            # Detach from comp graph to avoid that gradients are propagated through the target network.
-            next_state_values = next_state_values.detach()
             if self.multi_step:
-                td_target = reward + (self.gamma ** self.n_steps) * next_state_values
+                td_target = reward + (self.gamma ** self.n_steps) * Q_target_pred_next_picked
             else:
-                td_target = reward + self.gamma * next_state_values
+                td_target = reward + self.gamma * Q_target_pred_next_picked
 
-            # 2.2 update the Q network
-            # self.Q.update(...)
-            state_action_values = self.Q(torch.from_numpy(batch_states).to(device).float())
-            batch_actions_tensor = torch.from_numpy(batch_actions).to(device).view(-1, 1)
-
-            # Choose the action previously taken
-            q_pick = torch.gather(state_action_values, dim=1, index=batch_actions_tensor.long())
-            q_pick = q_pick.view(-1)
-            # Chosen like in this tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
-            self.optimizer.zero_grad()
-            # print(L_I.item(), L_F.item())
-            # td_loss = self.loss_function(input=q_pick, target=td_target.unsqueeze(1))
-            td_losses = (q_pick - td_target.detach()).pow(2)
+            if self.iqn:
+                Q_pred_picked_repeated = Q_pred_picked.view(-1, 1).repeat(1, self.iqn_np).view(-1, 1).squeeze()
+                td_target_repeated = \
+                    td_target.view(self.batch_size, self.iqn_np).repeat(1, self.iqn_n).view(-1, 1).squeeze()
+                taus_repeated = taus.view(-1, 1).repeat(1, self.iqn_np).view(-1, 1).squeeze()
+                # difference between predicted quantile values and target samples.
+                delta = td_target_repeated - Q_pred_picked_repeated
+                # if delta is negative, target is on the left of predicted quantile value.
+                ind_left = (delta < 0.0).float()
+                # weigh samples left of prediction with 1.0 - tau and the right with tau.
+                # if samples are distributed correctly, sides will cancel out to zero.
+                side_weight = torch.abs(taus_repeated - ind_left)
+                # calculate huber loss of delta
+                # case 0: delta < kappa; case 1: delta >= kappa
+                abs_delta = torch.abs(delta)
+                abs_smaller_kappa_mask = (abs_delta < self.huber_kappa).float()
+                huber_case0 = 0.5 * delta.pow(2) * abs_smaller_kappa_mask
+                huber_case1 = (self.huber_kappa * (abs_delta - 0.5 * self.huber_kappa) *
+                               torch.abs(1.0 - abs_smaller_kappa_mask))
+                huber_loss = huber_case0 + huber_case1
+                td_losses = huber_loss.view(-1, self.iqn_np).mean(dim=1).view(self.batch_size, self.iqn_n).sum(dim=1)
+            else:
+                # squared error
+                td_losses = (Q_pred_picked - td_target.detach()).pow(2)
 
             if self.intrinsic:
                 losses = self.lambda_intrinsic * td_losses + (1 - self.beta) * l_i + self.beta * r_i
