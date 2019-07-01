@@ -45,7 +45,7 @@ maps = {
 @click.option('-nu', '--non_uniform_sampling', default=False, type=click.BOOL)
 @click.option('-ms', '--multi_step', default=True, type=click.BOOL)
 @click.option('-mss', '--multi_step_size', default=3, type=click.INT)
-@click.option('-mu', '--mu_intrinsic', default=10, type=click.INT)
+@click.option('-mu', '--mu_intrinsic', default=1.0, type=click.FLOAT)
 @click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
 @click.option('-in', '--intrinsic', default=True, type=click.BOOL)
