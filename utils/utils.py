@@ -178,7 +178,53 @@ def create_sector_bounding_box(sectors):
         y_min = min(min([[line.y1, line.y2] for line in sector_i.lines]))
         y_max = max(max([[line.y1, line.y2] for line in sector_i.lines]))
 
+        # vertices = []
+        # last_vertices = [[0, 0], [0, 0]]
+        # for j, line in enumerate(sector_i.lines):
+        #     if j == 0:
+        #         vertices.append((line.x1, line.y1))
+        #         vertices.append((line.x2, line.y2))
+        #         last_vertices = [[line.x1, line.y1], [line.x2, line.y2]]
+        #     else:
+        #         if (last_vertices[0][0] != line.x1 or last_vertices[0][1] != line.y1) and \
+        #                 (last_vertices[1][0] != line.x1 or last_vertices[1][1] != line.y1):
+        #             vertices.append((line.x1, line.y1))
+        #         if (last_vertices[0][0] != line.x2 or last_vertices[0][1] != line.y2) and \
+        #                 (last_vertices[1][0] != line.x2 or last_vertices[1][1] != line.y2):
+        #             vertices.append((line.x2, line.y2))
+        #         last_vertices = [[line.x1, line.y1], [line.x2, line.y2]]
+
         sector_bbs['section_{}'.format(i)] = {
-            'x_min': x_min, 'x_max': x_max, 'y_min': y_min, 'y_max': y_max, 'area': (x_max - x_min) * (y_max - y_min)
+            'x_min': x_min, 'x_max': x_max, 'y_min': y_min, 'y_max': y_max, 'area': (x_max - x_min) * (y_max - y_min), 'cog': ((x_max + x_min) / 2, (y_max + y_min) / 2)
         }
+
+    # TODO: Calculate area of non rectangular rooms. Currently fixed for vizdoom.
+    sector_bbs['section_16']['area'] = 15360
+    sector_bbs['section_16']['cog'] = (488, -640)
+
     return sector_bbs
+
+
+# https://stackoverflow.com/questions/24467972/calculate-area-of-polygon-given-x-y-coordinates
+def PolygonArea(corners):
+    n = len(corners) # of corners
+    area = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        area += corners[i][0] * corners[j][1]
+        area -= corners[j][0] * corners[i][1]
+    area = abs(area) / 2.0
+    return area
+
+
+def arr_to_sig(arr):
+    """Convert a 2D array to a signature for cv2.EMD"""
+
+    # cv2.EMD requires single-precision, floating-point input
+    sig = np.empty((arr.size, 3), dtype=np.float32)
+    count = 0
+    for i in range(arr.shape[0]):
+        for j in range(arr.shape[1]):
+            sig[count] = np.array([arr[i, j], i, j])
+            count += 1
+    return sig

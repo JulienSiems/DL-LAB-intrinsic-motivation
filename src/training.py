@@ -6,6 +6,7 @@ from utils.utils import *
 import torch
 from PIL import Image
 from vizdoom_env.vizdoom_env import DoomEnv
+import cv2
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -66,8 +67,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
                 break
         if type(env) == DoomEnv:
             curr_sector = determine_sector(info['x_pos'], info['y_pos'], sector_bbs)
-            visited_sectors['sector_{}'.format(curr_sector)] = \
-                visited_sectors.get('sector_{}'.format(curr_sector), 0) + 1
+            visited_sectors['section_{}'.format(curr_sector)] = \
+                visited_sectors.get('section_{}'.format(curr_sector), 0) + 1
         trajectory = trajectory + [[info['x_pos'], info['y_pos']]]
 
         next_state = state_preprocessing(next_state, height=state_dim[1], width=state_dim[2],
@@ -114,6 +115,26 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                  history_length, rendering, max_timesteps, normalize_images, state_dim):
     print("... train agent")
 
+    if type(env) == DoomEnv:
+        sector_bbs = create_sector_bounding_box(env.state.sectors)
+
+        map_x_min = int(min([sector['x_min'] for _, sector in sector_bbs.items()]))
+        map_x_max = int(max([sector['x_max'] for _, sector in sector_bbs.items()]))
+
+        map_y_min = int(min([sector['y_min'] for _, sector in sector_bbs.items()]))
+        map_y_max = int(max([sector['y_max'] for _, sector in sector_bbs.items()]))
+
+        map_total_area = sum([sector['area'] for _, sector in sector_bbs.items()])
+
+        uniform_sector_prob = {}
+        uniform_dist_sig = np.empty((len(sector_bbs), 3), dtype=np.float32)
+        for index, (k, sector) in enumerate(sorted(sector_bbs.items())):
+            cord_x = int(sector['cog'][0] - map_x_min)
+            cord_y = int(sector['cog'][1] - map_y_min)
+            uniform_sector_prob[k] = ((cord_x, cord_y), sector['area'] / map_total_area)
+            uniform_dist_sig[index] = np.array([sector['area'] / map_total_area, cord_x, cord_y])
+        # uniform_dist_sig = arr_to_sig(uniform_dist)
+
     for i in range(num_episodes):
         print("episode %d" % i)
         max_timesteps_current = max_timesteps
@@ -135,8 +156,19 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                                   global_step=i)
                 writer.add_scalar('num_visited_sectors', len(visited_sectors), global_step=i)
                 writer.add_histogram('visited_sector_ids', [i for i in range(len(env.state.sectors)) if
-                                                            'sector_{}'.format(i) in visited_sectors.keys()],
+                                                            'section_{}'.format(i) in visited_sectors.keys()],
                                      global_step=i)
+
+                total_visits = sum([count for _, count in visited_sectors.items()])
+                obs_sector_prob = {}
+                obs_dist_sig = np.empty((len(sector_bbs), 3), dtype=np.float32)
+                for index, (k, sector) in enumerate(sorted(sector_bbs.items())):
+                    cord_x = int(sector['cog'][0] - map_x_min)
+                    cord_y = int(sector['cog'][1] - map_y_min)
+                    obs_sector_prob[k] = ((cord_x, cord_y), visited_sectors.get(k, 0) / total_visits)
+                    obs_dist_sig[index] = np.array([visited_sectors.get(k, 0) / total_visits, cord_x, cord_y])
+                dist, _, _ = cv2.EMD(obs_dist_sig, uniform_dist_sig, cv2.DIST_L2)
+                writer.add_scalar('wasserstein_distance', dist, global_step=i)
             else:
                 writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, None),
                                   global_step=i)
