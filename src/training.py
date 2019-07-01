@@ -190,7 +190,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         if i % eval_cycle == 0:
             stats = []
             for j in range(num_eval_episodes):
-                stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=1000,
+                stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=max_timesteps,
                                          history_length=history_length, skip_frames=skip_frames,
                                          normalize_images=normalize_images, state_dim=state_dim)[0])
             stats_agg = [stat.episode_reward for stat in stats]
