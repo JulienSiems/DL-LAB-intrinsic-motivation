@@ -17,8 +17,8 @@ class DQNAgent:
 
     def __init__(self, Q, Q_target, intrinsic_reward_generator, num_actions, capacity, intrinsic, extrinsic,
                  mu, beta, lambda_intrinsic, epsilon_start, epsilon_end, epsilon_decay, update_q_target,
-                 experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, state_dim,
-                 iqn, iqn_n, iqn_np, iqn_k, huber_kappa,
+                 experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, init_prio,
+                 state_dim, iqn, iqn_n, iqn_np, iqn_k, iqn_det_max_train, iqn_det_max_act, huber_kappa,
                  multi_step=True, multi_step_size=3, non_uniform_sampling=False, gamma=0.95, batch_size=64, epsilon=0.1,
                  tau=0.01, lr=1e-4, number_replays=10, soft_update=False, ddqn=True, epsilon_schedule=False,
                  pre_intrinsic=False, *args, **kwargs):
@@ -62,6 +62,7 @@ class DQNAgent:
         self.prio_er_beta_end = prio_er_beta_end
         self.prio_er_beta_decay = prio_er_beta_decay
         self.cur_prio_er_beta = prio_er_beta_start
+        self.init_prio = init_prio
         if experience_replay == 'Uniform':
             self.replay_buffer = UniformReplayBuffer(capacity=capacity, state_shape=tmp_state_shape,
                                                      state_store_dtype=np.float16, state_sample_dtype=np.float32)
@@ -106,6 +107,8 @@ class DQNAgent:
         self.iqn_n = iqn_n
         self.iqn_np = iqn_np
         self.iqn_k = iqn_k
+        self.iqn_det_max_train = iqn_det_max_train
+        self.iqn_det_max_act = iqn_det_max_act
         self.huber_kappa = huber_kappa
 
     # Adapated from https://github.com/qfettes/DeepRL-Tutorials/blob/master/02.NStep_DQN.ipynb
@@ -128,7 +131,8 @@ class DQNAgent:
             while len(self.n_step_buffer) > 0:
                 R = sum([self.n_step_buffer[i][3] * (self.gamma ** i) for i in range(len(self.n_step_buffer))])
                 state, action, next_state, _ = self.n_step_buffer.pop(0)
-                self.replay_buffer.add_transition(state, action, R, next_state, True, beginning=False, priority=500.0)
+                self.replay_buffer.add_transition(state, action, R, next_state, True, beginning=False,
+                                                  priority=self.init_prio)
 
     def train(self):
         """
@@ -164,9 +168,11 @@ class DQNAgent:
                 # when using IQN, net outputs are of shape (batch_size * num_taus, num_actions)
                 taus = torch.rand(size=(self.batch_size, self.iqn_n), dtype=torch.float, device=device)
                 taus_prime = torch.rand(size=(self.batch_size, self.iqn_np), dtype=torch.float, device=device)
-                taus_tilde = torch.linspace(start=0.0, end=1.0, steps=self.iqn_k + 2, dtype=torch.float, device=device)
-                taus_tilde = taus_tilde[1:-1].view(1, self.iqn_k).repeat(self.batch_size, 1)
-                # taus_tilde = torch.rand(size=(self.batch_size, self.iqn_k), dtype=torch.float, device=device)
+                if self.iqn_det_max_train:
+                    taus_tilde = torch.linspace(0.0, 1.0, steps=self.iqn_k + 2, dtype=torch.float, device=device)
+                    taus_tilde = taus_tilde[1:-1].view(1, self.iqn_k).repeat(self.batch_size, 1)
+                else:
+                    taus_tilde = torch.rand(size=(self.batch_size, self.iqn_k), dtype=torch.float, device=device)
                 # predict value of taken action.
                 Q_pred = self.Q(batch_states_, taus=taus)
                 batch_actions_repeated = batch_actions_.repeat(1, self.iqn_n).view(-1, 1)
@@ -301,10 +307,11 @@ class DQNAgent:
                 state_ = torch.from_numpy(np.expand_dims(state, 0)).to(device).float()
                 if self.iqn:
                     # for IQN we have to sample from reward distribution to determine greedy action
-                    # we evaluate q net at grid points of a linspace ranging from 0.0 to 1.0.
-                    taus = torch.linspace(start=0.0, end=1.0, steps=self.iqn_k + 2, dtype=torch.float, device=device)
-                    taus = taus[1:-1].view(1, self.iqn_k)
-                    # taus = torch.rand(size=(1, self.iqn_k), dtype=torch.float, device=device)
+                    if self.iqn_det_max_act:
+                        taus = torch.linspace(0.0, 1.0, steps=self.iqn_k + 2, dtype=torch.float, device=device)
+                        taus = taus[1:-1].view(1, self.iqn_k)
+                    else:
+                        taus = torch.rand(size=(1, self.iqn_k), dtype=torch.float, device=device)
                     pred = self.Q(state_, taus=taus)
                     action_id = torch.argmax(pred.mean(dim=0)).detach().cpu().numpy()
                 else:

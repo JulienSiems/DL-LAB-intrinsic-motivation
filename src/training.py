@@ -12,7 +12,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def run_episode(env, agent, deterministic, history_length, skip_frames, max_timesteps, normalize_images, state_dim,
-                do_training=True, rendering=False, soft_update=False):
+                init_prio, do_training=True, rendering=False, soft_update=False):
     """
     This methods runs one episode for a gym environment.
     deterministic == True => agent executes only greedy actions according the Q function approximator (no random actions).
@@ -53,8 +53,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             reward += r
 
             if terminal:
-                # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
-                agent.n_step_buffer = []
+                agent.finish_n_step()
                 if type(env) == DoomEnv:
                     return stats, loss, td_loss, L_I, L_F, info, trajectory, env.state.sectors, visited_sectors, sector_bbs
                 else:
@@ -63,8 +62,6 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             if rendering:
                 env.render()
 
-            if terminal:
-                break
         if type(env) == DoomEnv:
             curr_sector = determine_sector(info['x_pos'], info['y_pos'], sector_bbs)
             visited_sectors['section_{}'.format(curr_sector)] = \
@@ -80,7 +77,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         if do_training:
             # every transition is added with a high priority such that it gets replayed at least once
             agent.append_to_replay(state=state, action=action_id, next_state=next_state, reward=reward,
-                                   terminal=terminal, beginning=beginning, priority=500.0)
+                                   terminal=terminal, beginning=beginning, priority=init_prio)
             loss, td_loss, L_I, L_F = agent.train()
 
             # Update the target network
@@ -95,10 +92,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
         state = next_state
 
-        if terminal or (step * (skip_frames + 1)) > max_timesteps:  # or stats.episode_reward < -20:
-            if agent.multi_step:
-                # Empty multi step buffer to avoid incomplete multi steps in the replay buffer
-                agent.n_step_buffer = []
+        if terminal or (step * (skip_frames + 1)) > max_timesteps:
+            agent.finish_n_step()
             break
         step += 1
         beginning = False
@@ -112,7 +107,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
-                 history_length, rendering, max_timesteps, normalize_images, state_dim):
+                 history_length, rendering, max_timesteps, normalize_images, state_dim, init_prio):
     print("... train agent")
 
     if type(env) == DoomEnv:
@@ -147,7 +142,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                                                            skip_frames=skip_frames,
                                                            history_length=history_length,
                                                            normalize_images=normalize_images,
-                                                           state_dim=state_dim)
+                                                           state_dim=state_dim,
+                                                           init_prio=init_prio)
 
         if len(trajectory) > 0:
             if type(env) == DoomEnv:
@@ -192,7 +188,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             for j in range(num_eval_episodes):
                 stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=max_timesteps,
                                          history_length=history_length, skip_frames=skip_frames,
-                                         normalize_images=normalize_images, state_dim=state_dim)[0])
+                                         normalize_images=normalize_images, state_dim=state_dim,
+                                         init_prio=init_prio)[0])
             stats_agg = [stat.episode_reward for stat in stats]
             episode_reward_mean, episode_reward_std = np.mean(stats_agg), np.std(stats_agg)
             print('Validation {} +- {}'.format(episode_reward_mean, episode_reward_std))
