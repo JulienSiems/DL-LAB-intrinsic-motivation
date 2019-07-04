@@ -5,6 +5,7 @@ import sys
 sys.path.append("../")
 
 import torch
+import torch.nn
 from src.agent.dqn_agent import DQNAgent
 from src.agent.networks import ResnetVariant, LeNetVariant, DeepQNetwork, InverseModel, ForwardModel, Encoder
 from src.agent.intrinsic_reward import IntrinsicRewardGenerator
@@ -28,6 +29,7 @@ maps = {
 @click.option('-K', '--number_replays', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
 @click.option('-lr', '--learning_rate', default=1e-3, type=click.FLOAT)
+@click.option('-ac', '--activation', default='ReLU', type=click.Choice(['ReLU', 'ELU', 'LeakyReLU']))
 @click.option('-ca', '--capacity', default=2**17, type=click.INT)
 @click.option('-g', '--gamma', default=0.9999, type=click.FLOAT)
 @click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
@@ -80,7 +82,7 @@ maps = {
 @click.option('-sh', '--state_height', default=42, type=click.INT)
 @click.option('-sw', '--state_width', default=42, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
-         epsilon, tau, soft_update, history_length, skip_frames, ddqn, model, environment, map,
+         epsilon, tau, soft_update, history_length, skip_frames, ddqn, model, environment, map, activation,
          render_training, max_timesteps, normalize_images, non_uniform_sampling, multi_step, multi_step_size,
          mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, residual_icm_forward, use_history_in_icm, extrinsic,
          update_q_target, epsilon_schedule,
@@ -144,10 +146,12 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     else:
         raise ValueError('{} not implemented'.format(model))
 
+    activation = {'ReLU': torch.nn.ReLU, 'ELU': torch.nn.ELU, 'LeakyReLU': torch.nn.LeakyReLU}[activation]
+
     Q_net = CNN(in_dim=state_dim, num_actions=num_actions, history_length=history_length,
-                duelling=duelling, iqn=iqn, embedding_dim=iqn_tau_embed_dim).to(device)
+                duelling=duelling, iqn=iqn, activation=activation, embedding_dim=iqn_tau_embed_dim).to(device)
     Q_target_net = CNN(in_dim=state_dim, num_actions=num_actions, history_length=history_length,
-                       duelling=duelling, iqn=iqn, embedding_dim=iqn_tau_embed_dim).to(device)
+                       duelling=duelling, iqn=iqn, activation=activation, embedding_dim=iqn_tau_embed_dim).to(device)
 
     # Intrinsic reward networks
     if use_history_in_icm:
