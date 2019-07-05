@@ -53,6 +53,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             reward += r
 
             if terminal:
+                stats.step(reward, action_id)
                 agent.finish_n_step()
                 if type(env) == DoomEnv:
                     return stats, loss, td_loss, L_I, L_F, info, trajectory, env.state.sectors, visited_sectors, sector_bbs
@@ -66,7 +67,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             curr_sector = determine_sector(info['x_pos'], info['y_pos'], sector_bbs)
             visited_sectors['section_{}'.format(curr_sector)] = \
                 visited_sectors.get('section_{}'.format(curr_sector), 0) + 1
-        trajectory = trajectory + [[info['x_pos'], info['y_pos']]]
+        if 'x_pos' in info and 'y_pos' in info:
+            trajectory = trajectory + [[info['x_pos'], info['y_pos']]]
 
         next_state = state_preprocessing(next_state, height=state_dim[1], width=state_dim[2],
                                          normalize=normalize_images)

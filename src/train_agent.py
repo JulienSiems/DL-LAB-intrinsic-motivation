@@ -16,7 +16,7 @@ import click
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-envs = ['VizDoom', 'Mario', 'GridWorld']
+envs = ['VizDoom', 'Mario', 'GridWorld', 'Pong']
 maps = {
     envs[0]: ['my_way_home_spwnhard', 'my_way_home_org', 'my_way_home_spwnhard_nogoal']
 }
@@ -126,6 +126,13 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
             env = gym_minigrid.envs.EmptyEnv(size=grid_size)
             env = ClassicalGridworldWrapper(env)
             writer = setup_experiment_folder_writer(inspect.currentframe(), name='GridWorld', log_dir='gridworld',
+                                                    args_for_filename=['environment', 'extrinsic', 'intrinsic',
+                                                                       'fixed_encoder', 'ddqn', 'duelling', 'iqn',
+                                                                       'experience_replay', 'soft_update'])
+        elif environment == envs[3]:
+            import gym
+            env = gym.make('Pong-v0')
+            writer = setup_experiment_folder_writer(inspect.currentframe(), name='Pong', log_dir='pong',
                                                     args_for_filename=['environment', 'extrinsic', 'intrinsic',
                                                                        'fixed_encoder', 'ddqn', 'duelling', 'iqn',
                                                                        'experience_replay', 'soft_update'])
