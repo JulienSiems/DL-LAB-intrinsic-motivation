@@ -166,7 +166,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
                             use_history=use_history_in_icm).to(device)
     # push a dummy input through state_encoder to get output dimension which is needed to build dynamics models.
     tmp_inp = torch.zeros(size=(1, channels * (history_length if use_history_in_icm else 1), state_height, state_width))
-    tmp_out = state_encoder(tmp_inp)
+    tmp_out = state_encoder(tmp_inp.to(device))
     inverse_dynamics_model = InverseModel(num_actions=num_actions, input_dim=2*tmp_out.shape[1]).to(device)
     forward_dynamics_model = ForwardModel(num_actions=num_actions, state_dim=tmp_out.shape[1]).to(device)
 
