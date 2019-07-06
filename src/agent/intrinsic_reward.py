@@ -20,8 +20,8 @@ class IntrinsicRewardGenerator:
             state = np.expand_dims(state[:, -1, :, :], axis=1)
             next_state = np.expand_dims(next_state[:, -1, :, :], axis=1)
 
-        phi_s_t = self.state_encoder(torch.from_numpy(state).to(device).float())  # [BS, 288]
-        phi_s_tp1 = self.state_encoder(torch.from_numpy(next_state).to(device).float())  # [BS, 288]
+        phi_s_t = self.state_encoder(torch.from_numpy(state).to(device).float())  # [BS, encoding_dim]
+        phi_s_tp1 = self.state_encoder(torch.from_numpy(next_state).to(device).float())  # [BS, encoding_dim]
         if self.fixed_encoder:
             phi_s_t = phi_s_t.detach()
             phi_s_tp1 = phi_s_tp1.detach()

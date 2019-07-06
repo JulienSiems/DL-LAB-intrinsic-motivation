@@ -83,7 +83,7 @@ class DeepQNetwork(nn.Module):
         self.embedding_dim = embedding_dim
 
         self.conv1 = nn.Sequential(
-            nn.Conv2d(history_length, 32, kernel_size=8, stride=4, padding=0),
+            nn.Conv2d(in_dim[0] * history_length, 32, kernel_size=8, stride=4, padding=0),
             activation()
         )
         self.conv2 = nn.Sequential(
@@ -95,7 +95,7 @@ class DeepQNetwork(nn.Module):
             activation()
         )
 
-        dummy_input = torch.zeros(1, in_dim[0], in_dim[1], in_dim[2])
+        dummy_input = torch.zeros(1, in_dim[0] * history_length, in_dim[1], in_dim[2])
         out_cnn = self.conv3(self.conv2(self.conv1(dummy_input)))
         self.cnn_out_dim = out_cnn.view(out_cnn.size(0), -1).shape[1]
 
@@ -165,10 +165,11 @@ class DeepQNetwork(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__(self, history_length, filters=32):
+    def __init__(self, in_dim, history_length, use_history, filters=32):
         super(Encoder, self).__init__()
+        in_channels = in_dim[0] * (history_length if use_history else 1)
         self.conv1 = nn.Sequential(
-            nn.Conv2d(history_length, filters, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(in_channels, filters, kernel_size=3, stride=2, padding=1),
             nn.ELU()
         )
         self.conv2 = nn.Sequential(
@@ -198,13 +199,13 @@ class InverseModel(nn.Module):
     The inverse dynamics model (eq. 2) predicts the action taken between state s_t and s_t+1
     """
 
-    def __init__(self, num_actions=4, input_dimension=288 * 2):
+    def __init__(self, num_actions, input_dim, hidden_dim=256):
         super(InverseModel, self).__init__()
         self.hidden = nn.Sequential(
-            nn.Linear(input_dimension, 256, bias=True),
+            nn.Linear(input_dim, hidden_dim, bias=True),
             nn.ELU()
         )
-        self.output = nn.Linear(256, num_actions, bias=True)
+        self.output = nn.Linear(hidden_dim, num_actions, bias=True)
 
     def forward(self, phi_s_t, phi_s_tp1):
         feature_vector = torch.cat([phi_s_t, phi_s_tp1], dim=1)
@@ -218,13 +219,13 @@ class ForwardModel(nn.Module):
     The forward dynamics model (eq. 4) predicts the embedding of the next state given the current state and the action taken.
     """
 
-    def __init__(self, num_actions, dim_s=288, output_dimension=288):
+    def __init__(self, num_actions, state_dim, hidden_dim=256):
         super(ForwardModel, self).__init__()
         self.hidden = nn.Sequential(
-            nn.Linear(num_actions + dim_s, 256, bias=True),
+            nn.Linear(state_dim + num_actions, hidden_dim, bias=True),
             nn.ELU()
         )
-        self.output = nn.Linear(256, output_dimension, bias=True)
+        self.output = nn.Linear(hidden_dim, state_dim, bias=True)
 
     def forward(self, phi_s_t, a_t):
         feature_vector = torch.cat([phi_s_t, a_t], dim=1)

@@ -26,11 +26,12 @@ maps = {
 @click.option('-ne', '--num_episodes', default=10000, type=click.INT, help='train for ... episodes')
 @click.option('-ec', '--eval_cycle', default=50, type=click.INT, help='evaluate every ... episodes')
 @click.option('-nee', '--num_eval_episodes', default=1, type=click.INT, help='evaluate this many epochs')
-@click.option('-K', '--number_replays', default=1, type=click.INT)
+@click.option('-tens', '--train_every_n_steps', default=4, type=click.INT)
+@click.option('-tnt', '--train_n_times', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
 @click.option('-lr', '--learning_rate', default=1e-3, type=click.FLOAT)
 @click.option('-ac', '--activation', default='ReLU', type=click.Choice(['ReLU', 'ELU', 'LeakyReLU']))
-@click.option('-ca', '--capacity', default=2**17, type=click.INT)
+@click.option('-ca', '--capacity', default=2**19, type=click.INT)
 @click.option('-g', '--gamma', default=0.9999, type=click.FLOAT)
 @click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
 @click.option('-t', '--tau', default=0.01, type=click.FLOAT)
@@ -45,8 +46,7 @@ maps = {
 @click.option('-mt', '--max_timesteps', default=2100, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=False, type=click.BOOL)
-@click.option('-ms', '--multi_step', default=True, type=click.BOOL)
-@click.option('-mss', '--multi_step_size', default=3, type=click.INT)
+@click.option('-nsr', '--n_step_reward', default=3, type=click.INT)
 @click.option('-mu', '--mu_intrinsic', default=1.0, type=click.FLOAT)
 @click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
@@ -67,7 +67,7 @@ maps = {
 @click.option('-per_a', '--prio_er_alpha', default=0.6, type=click.FLOAT)
 @click.option('-per_bs', '--prio_er_beta_start', default=0.4, type=click.FLOAT)
 @click.option('-per_be', '--prio_er_beta_end', default=1.0, type=click.FLOAT)
-@click.option('-per_bdc', '--prio_er_beta_decay', default=250000, type=click.INT)
+@click.option('-per_bdc', '--prio_er_beta_decay', default=1000000, type=click.INT)
 @click.option('-ip', '--init_prio', default=500.0, type=click.FLOAT)
 @click.option('-fe', '--fixed_encoder', default=False, type=click.BOOL)
 @click.option('-du', '--duelling', default=False, type=click.BOOL)
@@ -81,9 +81,9 @@ maps = {
 @click.option('-hk', '--huber_kappa', default=1.0, type=click.FLOAT)
 @click.option('-sh', '--state_height', default=42, type=click.INT)
 @click.option('-sw', '--state_width', default=42, type=click.INT)
-def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size, learning_rate, capacity, gamma,
-         epsilon, tau, soft_update, history_length, skip_frames, ddqn, model, environment, map, activation,
-         render_training, max_timesteps, normalize_images, non_uniform_sampling, multi_step, multi_step_size,
+def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train_n_times, batch_size, learning_rate,
+         capacity, gamma, epsilon, tau, soft_update, history_length, skip_frames, ddqn, model, environment, map,
+         activation, render_training, max_timesteps, normalize_images, non_uniform_sampling, n_step_reward,
          mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, residual_icm_forward, use_history_in_icm, extrinsic,
          update_q_target, epsilon_schedule,
          epsilon_start, epsilon_end, epsilon_decay, virtual_display, seed, pre_intrinsic, experience_replay,
@@ -93,18 +93,22 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
+    args_for_filename = ['environment', 'extrinsic', 'intrinsic', 'fixed_encoder', 'ddqn', 'duelling', 'iqn',
+                         'experience_replay', 'soft_update', 'n_step_reward']
     if environment == envs[0]:
         from vizdoom_env.vizdoom_env import DoomEnv
         env = DoomEnv(map_name=map, render=render_training)
         writer = setup_experiment_folder_writer(inspect.currentframe(), name='Vizdoom', log_dir='vizdoom',
-                                                args_for_filename=['environment', 'extrinsic', 'intrinsic',
-                                                                   'fixed_encoder', 'ddqn', 'duelling', 'iqn',
-                                                                   'experience_replay', 'soft_update'])
+                                                args_for_filename=args_for_filename)
+        # placeholder for non uniform action probabilities. change to something sensible if wanted.
+        nu_action_probs = np.ones(env.action_space.n, dtype=np.float32) / env.action_space.n
     else:
         if virtual_display:
             if render_training:
                 print(
-                    'On the tfpool computers this will probably not work together. Better deactivate render training when using the virtual display.')
+                    """On the tfpool computers this will probably not work together.
+                    Better deactivate render_training when using the virtual display."""
+                )
             from pyvirtualdisplay import Display
             display = Display(visible=0, size=(224, 240))
             display.start()
@@ -116,9 +120,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
             env = gym_super_mario_bros.make('SuperMarioBros-v0').unwrapped
             env = JoypadSpace(env, COMPLEX_MOVEMENT)
             writer = setup_experiment_folder_writer(inspect.currentframe(), name='Mario', log_dir='mario',
-                                                    args_for_filename=['environment', 'extrinsic', 'intrinsic',
-                                                                       'fixed_encoder', 'ddqn', 'duelling', 'iqn',
-                                                                       'experience_replay', 'soft_update'])
+                                                    args_for_filename=args_for_filename)
+            nu_action_probs = np.ones(env.action_space.n, dtype=np.float32) / env.action_space.n
         elif environment == envs[2]:
             import gym_minigrid
             from src.train_gridworld import ClassicalGridworldWrapper
@@ -126,22 +129,21 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
             env = gym_minigrid.envs.EmptyEnv(size=grid_size)
             env = ClassicalGridworldWrapper(env)
             writer = setup_experiment_folder_writer(inspect.currentframe(), name='GridWorld', log_dir='gridworld',
-                                                    args_for_filename=['environment', 'extrinsic', 'intrinsic',
-                                                                       'fixed_encoder', 'ddqn', 'duelling', 'iqn',
-                                                                       'experience_replay', 'soft_update'])
+                                                    args_for_filename=args_for_filename)
+            nu_action_probs = np.ones(env.action_space.n, dtype=np.float32) / env.action_space.n
         elif environment == envs[3]:
             import gym
             env = gym.make('Pong-v0')
             writer = setup_experiment_folder_writer(inspect.currentframe(), name='Pong', log_dir='pong',
-                                                    args_for_filename=['environment', 'extrinsic', 'intrinsic',
-                                                                       'fixed_encoder', 'ddqn', 'duelling', 'iqn',
-                                                                       'experience_replay', 'soft_update'])
+                                                    args_for_filename=args_for_filename)
+            nu_action_probs = np.ones(env.action_space.n, dtype=np.float32) / env.action_space.n
         else:
             raise NotImplementedError()
 
     num_actions = env.action_space.n
 
-    state_dim = (history_length, state_height, state_width)
+    channels = 1  # greyscale images
+    state_dim = (channels, state_height, state_width)  # not taking history_length into account. handled later.
 
     # Define Q network, target network and DQN agent
     if model == 'Resnet':
@@ -160,15 +162,13 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
     Q_target_net = CNN(in_dim=state_dim, num_actions=num_actions, history_length=history_length,
                        duelling=duelling, iqn=iqn, activation=activation, embedding_dim=iqn_tau_embed_dim).to(device)
 
-    # Intrinsic reward networks
-    if use_history_in_icm:
-        encoder_in_channels = history_length
-    else:
-        encoder_in_channels = 1
-
-    state_encoder = Encoder(history_length=encoder_in_channels).to(device)
-    inverse_dynamics_model = InverseModel(num_actions=num_actions).to(device)
-    forward_dynamics_model = ForwardModel(num_actions=num_actions).to(device)
+    state_encoder = Encoder(in_dim=state_dim, history_length=history_length,
+                            use_history=use_history_in_icm).to(device)
+    # push a dummy input through state_encoder to get output dimension which is needed to build dynamics models.
+    tmp_inp = torch.zeros(size=(1, channels * (history_length if use_history_in_icm else 1), state_height, state_width))
+    tmp_out = state_encoder(tmp_inp)
+    inverse_dynamics_model = InverseModel(num_actions=num_actions, input_dim=2*tmp_out.shape[1]).to(device)
+    forward_dynamics_model = ForwardModel(num_actions=num_actions, state_dim=tmp_out.shape[1]).to(device)
 
     intrinsic_reward_network = IntrinsicRewardGenerator(state_encoder=state_encoder,
                                                         inverse_dynamics_model=inverse_dynamics_model,
@@ -180,16 +180,17 @@ def main(num_episodes, eval_cycle, num_eval_episodes, number_replays, batch_size
 
     agent = DQNAgent(Q=Q_net, Q_target=Q_target_net, intrinsic_reward_generator=intrinsic_reward_network,
                      num_actions=num_actions, gamma=gamma, batch_size=batch_size, tau=tau, epsilon=epsilon,
-                     lr=learning_rate, capacity=capacity, number_replays=number_replays, soft_update=soft_update,
-                     ddqn=ddqn, multi_step=multi_step, multi_step_size=multi_step_size,
+                     capacity=capacity, train_every_n_steps=train_every_n_steps, history_length=history_length,
+                     soft_update=soft_update, ddqn=ddqn, n_step_reward=n_step_reward, train_n_times=train_n_times,
                      non_uniform_sampling=non_uniform_sampling, epsilon_schedule=epsilon_schedule, mu=mu_intrinsic,
                      beta=beta_intrinsic, update_q_target=update_q_target, lambda_intrinsic=lambda_intrinsic,
-                     intrinsic=intrinsic, epsilon_start=epsilon_start, epsilon_end=epsilon_end,
+                     intrinsic=intrinsic, epsilon_start=epsilon_start, epsilon_end=epsilon_end, lr=learning_rate,
                      epsilon_decay=epsilon_decay, extrinsic=extrinsic, pre_intrinsic=pre_intrinsic,
                      experience_replay=experience_replay, prio_er_alpha=prio_er_alpha, huber_kappa=huber_kappa,
                      prio_er_beta_start=prio_er_beta_start, prio_er_beta_end=prio_er_beta_end, init_prio=init_prio,
                      prio_er_beta_decay=prio_er_beta_decay, state_dim=state_dim, iqn=iqn, iqn_n=iqn_n, iqn_np=iqn_np,
-                     iqn_k=iqn_k, iqn_det_max_train=iqn_det_max_train, iqn_det_max_act=iqn_det_max_act)
+                     iqn_k=iqn_k, iqn_det_max_train=iqn_det_max_train, iqn_det_max_act=iqn_det_max_act,
+                     nu_action_probs=nu_action_probs)
 
     train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
                  num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,
