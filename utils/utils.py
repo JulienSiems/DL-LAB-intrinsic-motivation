@@ -104,11 +104,13 @@ class EpisodeStats:
 
     def __init__(self):
         self.episode_reward = 0
+        self.intrinsic_reward = 0.0
         self.actions_ids = []
         self.steps = 0
 
-    def step(self, reward, action_id):
+    def step(self, reward, intrinsic_reward, action_id):
         self.episode_reward += reward
+        self.intrinsic_reward += intrinsic_reward
         self.actions_ids.append(action_id)
         self.steps += 1
 

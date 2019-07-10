@@ -35,7 +35,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     for h_idx in range(0, state_dim[0] * history_length, state_dim[0]):
         history_buffer[h_idx] = state
 
-    loss, td_loss, L_I, L_F = 0.0, 0.0, 0.0, 0.0
+    loss, td_loss, L_I, L_F, intrinsic_reward = 0.0, 0.0, 0.0, 0.0, 0.0
     trajectory = []
     if type(env) == DoomEnv:
         sector_bbs = create_sector_bounding_box(env.state.sectors)
@@ -70,7 +70,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
             losses = agent.train()
             if losses[0] is not None:
-                loss, td_loss, L_I, L_F = losses
+                loss, td_loss, L_I, L_F, intrinsic_reward = losses
 
             # update the target network
             agent.steps_done += 1
@@ -81,7 +81,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             if step % 100 == 0:
                 print('loss', loss)
 
-        stats.step(reward, action)
+        stats.step(reward, intrinsic_reward, action)
         state = next_state
         step += 1
         beginning = False
@@ -187,6 +187,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         writer.add_scalar('train_l_f', L_F, global_step=episode_idx)
         writer.add_scalar('train_episode_reward', stats.episode_reward, global_step=episode_idx)
         writer.add_scalar('train_episode_length', stats.steps, global_step=episode_idx)
+        writer.add_scalar('intrinsic_episode_reward', stats.intrinsic_reward, global_step=episode_idx)
+        print('episode_intrinsic_reward', stats.intrinsic_reward)
         print('steps:', stats.steps)
         for action in range(env.action_space.n):
             writer.add_scalar('train_{}'.format(action), stats.get_action_usage(action), global_step=episode_idx)

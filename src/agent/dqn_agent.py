@@ -259,7 +259,7 @@ class DQNAgent:
 
         self.train_steps += 1
         self.train_steps_done += 1
-        return losses.mean().item(), td_losses.mean().item(), L_I.item(), L_F.item()
+        return losses.mean().item(), td_losses.mean().item(), L_I.item(), L_F.item(), intrinsic_reward.mean().item()
 
     def act(self, state, deterministic):
         """

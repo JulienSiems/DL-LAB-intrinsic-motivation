@@ -18,14 +18,14 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 envs = ['VizDoom', 'Mario', 'GridWorld', 'Pong']
 maps = {
-    envs[0]: ['my_way_home_spwnhard', 'my_way_home_org', 'my_way_home_spwnhard_nogoal']
+    envs[0]: ['my_way_home_org', 'my_way_home_spwnhard', 'my_way_home_spwnhard_nogoal']
 }
 
 
 @click.command()
 @click.option('-ne', '--num_episodes', default=10000, type=click.INT, help='train for ... episodes')
-@click.option('-ec', '--eval_cycle', default=50, type=click.INT, help='evaluate every ... episodes')
-@click.option('-nee', '--num_eval_episodes', default=1, type=click.INT, help='evaluate this many epochs')
+@click.option('-ec', '--eval_cycle', default=100, type=click.INT, help='evaluate every ... episodes')
+@click.option('-nee', '--num_eval_episodes', default=5, type=click.INT, help='evaluate this many epochs')
 @click.option('-tens', '--train_every_n_steps', default=4, type=click.INT)
 @click.option('-tnt', '--train_n_times', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
@@ -47,13 +47,13 @@ maps = {
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=False, type=click.BOOL)
 @click.option('-nsr', '--n_step_reward', default=3, type=click.INT)
-@click.option('-mu', '--mu_intrinsic', default=1.0, type=click.FLOAT)
+@click.option('-mu', '--mu_intrinsic', default=0.001, type=click.FLOAT)
 @click.option('-beta', '--beta_intrinsic', default=0.2, type=click.FLOAT)
 @click.option('-lambda', '--lambda_intrinsic', default=0.1, type=click.FLOAT)
 @click.option('-in', '--intrinsic', default=True, type=click.BOOL)
 @click.option('-res', '--residual_icm_forward', default=False, type=click.BOOL)
 @click.option('-ih', '--use_history_in_icm', default=True, type=click.BOOL)
-@click.option('-ex', '--extrinsic', default=False, type=click.BOOL)
+@click.option('-ex', '--extrinsic', default=True, type=click.BOOL)
 @click.option('-uq', '--update_q_target', default=10000, type=click.INT,
               help='How many steps to pass between each q_target update')
 @click.option('-es', '--epsilon_schedule', default=False, type=click.BOOL)
