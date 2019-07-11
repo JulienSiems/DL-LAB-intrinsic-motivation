@@ -35,7 +35,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     for h_idx in range(0, state_dim[0] * history_length, state_dim[0]):
         history_buffer[h_idx] = state
 
-    loss, td_loss, L_I, L_F, intrinsic_reward = 0.0, 0.0, 0.0, 0.0, 0.0
+    loss, td_loss, L_I, L_F = 0.0, 0.0, 0.0, 0.0
     trajectory = []
     if type(env) == DoomEnv:
         sector_bbs = create_sector_bounding_box(env.state.sectors)
@@ -44,9 +44,9 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     while not done and step < max_timesteps:
         # get action from agent every (skip_frames + 1) frames when training or every frame when not training
         if step % (skip_frames + 1) == 0 or not do_training:
-            action = agent.act(state=history_buffer, deterministic=deterministic)
+            action = int(agent.act(state=history_buffer, deterministic=deterministic))
 
-        next_state, reward, done, info = env.step(int(action))
+        next_state, reward, done, info = env.step(action)
 
         if rendering:
             env.render()
@@ -58,11 +58,21 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         if 'x_pos' in info and 'y_pos' in info:
             trajectory = trajectory + [[info['x_pos'], info['y_pos']]]
 
+        if agent.intrinsic:
+            # if there is intrinsic reward to track, keep old state history to calculate intrinsic reward for this step
+            history_buffer_old = history_buffer.copy()[np.newaxis, ...]
+
         next_state = state_preprocessing(next_state, height=state_dim[1], width=state_dim[2], normalize=normalize_images)
         # update history buffer with latest state. shift all states one to the left and add latest state at end.
         for h_idx in range(state_dim[0], state_dim[0] * history_length, state_dim[0]):
             history_buffer[(h_idx-state_dim[0]):h_idx] = history_buffer[h_idx:(h_idx+state_dim[0])]
         history_buffer[state_dim[0]*(history_length-1):] = next_state
+
+        if agent.intrinsic:
+            with torch.no_grad():
+                _, _, r_i, _ = agent.intrinsic_reward_generator.compute_intrinsic_reward(history_buffer_old,
+                                                                                         np.array([action]),
+                                                                                         history_buffer[np.newaxis, ...])
 
         if do_training:
             # when initially added, a transition gets assigned a high priority, such that it gets replayed at least once
@@ -70,7 +80,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
             losses = agent.train()
             if losses[0] is not None:
-                loss, td_loss, L_I, L_F, intrinsic_reward = losses
+                loss, td_loss, L_I, L_F = losses
 
             # update the target network
             agent.steps_done += 1
@@ -81,7 +91,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             if step % 100 == 0:
                 print('loss', loss)
 
-        stats.step(reward, intrinsic_reward, action)
+        stats.step(reward, r_i.item() * agent.mu if agent.intrinsic else 0.0, action)
         state = next_state
         step += 1
         beginning = False
@@ -188,8 +198,6 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         writer.add_scalar('train_episode_reward', stats.episode_reward, global_step=episode_idx)
         writer.add_scalar('train_episode_length', stats.steps, global_step=episode_idx)
         writer.add_scalar('intrinsic_episode_reward', stats.intrinsic_reward, global_step=episode_idx)
-        print('episode_intrinsic_reward', stats.intrinsic_reward)
-        print('steps:', stats.steps)
         for action in range(env.action_space.n):
             writer.add_scalar('train_{}'.format(action), stats.get_action_usage(action), global_step=episode_idx)
 

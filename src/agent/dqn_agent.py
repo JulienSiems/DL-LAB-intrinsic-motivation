@@ -259,7 +259,7 @@ class DQNAgent:
 
         self.train_steps += 1
         self.train_steps_done += 1
-        return losses.mean().item(), td_losses.mean().item(), L_I.item(), L_F.item(), intrinsic_reward.mean().item()
+        return losses.mean().item(), td_losses.mean().item(), L_I.item(), L_F.item()
 
     def act(self, state, deterministic):
         """
@@ -298,9 +298,9 @@ class DQNAgent:
                     action_id = torch.argmax(pred).detach().cpu().numpy()
         else:
             if self.non_uniform_sampling:
-                action_id = np.random.choice(self.num_actions, 1, p=self.nu_action_probs)[0]
+                action_id = np.random.choice(self.num_actions, size=(1,), p=self.nu_action_probs)[0]
             else:
-                action_id = np.random.randint(self.num_actions)
+                action_id = np.random.randint(self.num_actions, size=(1,))
         return action_id
 
     def save(self, file_name):
