@@ -8,6 +8,7 @@ from PIL import Image
 from vizdoom_env.vizdoom_env import DoomEnv
 import cv2
 import glob
+import pickle
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -151,6 +152,9 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         # store model.
         if episode_idx % eval_cycle == 0 or episode_idx >= (num_episodes - 1):
             model_files = glob.glob(os.path.join(writer.logdir, "agent*"))
+            # Sort by date
+            model_files.sort(key=os.path.getmtime)
+
             if len(model_files) > num_model_files - 1:
                 # Delete the oldest model file
                 os.remove(model_files[0])
@@ -205,7 +209,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                     cord_x = int(sector['cog'][0] - map_x_min)
                     cord_y = int(sector['cog'][1] - map_y_min)
                     cumulative_obs_sector_visits[k] = (
-                    (cord_x, cord_y), cumulative_obs_sector_visits.get(k, (0, 0))[1] + visited_sectors.get(k, 0))
+                        (cord_x, cord_y), cumulative_obs_sector_visits.get(k, (0, 0))[1] + visited_sectors.get(k, 0))
                 cumulative_obs_sector_total_visits += total_visits
 
                 current_cumulative_obs_dist_sig = np.empty((len(sector_bbs), 3), dtype=np.float32)
@@ -226,6 +230,10 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             else:
                 writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, None),
                                   global_step=episode_idx)
+
+            # Append current trajectory to save of all trajectories
+            with open(os.path.join(writer.logdir, "trajectories.obj"), 'ab+') as fp:
+                pickle.dump(trajectory, fp)
 
         for key, value in info.items():
             if type(value) is not str:
