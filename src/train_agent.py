@@ -31,7 +31,7 @@ maps = {
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
 @click.option('-lr', '--learning_rate', default=1e-3, type=click.FLOAT)
 @click.option('-ac', '--activation', default='ReLU', type=click.Choice(['ReLU', 'ELU', 'LeakyReLU']))
-@click.option('-ca', '--capacity', default=2**19, type=click.INT)
+@click.option('-ca', '--capacity', default=2 ** 19, type=click.INT)
 @click.option('-g', '--gamma', default=0.9999, type=click.FLOAT)
 @click.option('-e', '--epsilon', default=0.1, type=click.FLOAT)
 @click.option('-t', '--tau', default=0.01, type=click.FLOAT)
@@ -81,6 +81,7 @@ maps = {
 @click.option('-hk', '--huber_kappa', default=1.0, type=click.FLOAT)
 @click.option('-sh', '--state_height', default=42, type=click.INT)
 @click.option('-sw', '--state_width', default=42, type=click.INT)
+@click.option('-nmf', '--number_model_files', default=10, type=click.INT)
 def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train_n_times, batch_size, learning_rate,
          capacity, gamma, epsilon, tau, soft_update, history_length, skip_frames, ddqn, model, environment, map,
          activation, render_training, max_timesteps, normalize_images, non_uniform_sampling, n_step_reward,
@@ -89,7 +90,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
          epsilon_start, epsilon_end, epsilon_decay, virtual_display, seed, pre_intrinsic, experience_replay,
          prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, init_prio, fixed_encoder, duelling,
          iqn, iqn_n, iqn_np, iqn_k, iqn_tau_embed_dim, iqn_det_max_train, iqn_det_max_act, huber_kappa, state_height,
-         state_width):
+         state_width, number_model_files):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
@@ -167,7 +168,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
     # push a dummy input through state_encoder to get output dimension which is needed to build dynamics models.
     tmp_inp = torch.zeros(size=(1, channels * (history_length if use_history_in_icm else 1), state_height, state_width))
     tmp_out = state_encoder(tmp_inp.to(device))
-    inverse_dynamics_model = InverseModel(num_actions=num_actions, input_dim=2*tmp_out.shape[1]).to(device)
+    inverse_dynamics_model = InverseModel(num_actions=num_actions, input_dim=2 * tmp_out.shape[1]).to(device)
     forward_dynamics_model = ForwardModel(num_actions=num_actions, state_dim=tmp_out.shape[1]).to(device)
 
     intrinsic_reward_network = IntrinsicRewardGenerator(state_encoder=state_encoder,
@@ -195,7 +196,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
     train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
                  num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,
                  history_length=history_length, rendering=render_training, max_timesteps=max_timesteps,
-                 normalize_images=normalize_images, state_dim=state_dim, init_prio=init_prio)
+                 normalize_images=normalize_images, state_dim=state_dim, init_prio=init_prio,
+                 num_model_files=number_model_files)
     writer.close()
 
 

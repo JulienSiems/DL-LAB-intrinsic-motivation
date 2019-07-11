@@ -7,6 +7,7 @@ import torch
 from PIL import Image
 from vizdoom_env.vizdoom_env import DoomEnv
 import cv2
+import glob
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -62,17 +63,19 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             # if there is intrinsic reward to track, keep old state history to calculate intrinsic reward for this step
             history_buffer_old = history_buffer.copy()[np.newaxis, ...]
 
-        next_state = state_preprocessing(next_state, height=state_dim[1], width=state_dim[2], normalize=normalize_images)
+        next_state = state_preprocessing(next_state, height=state_dim[1], width=state_dim[2],
+                                         normalize=normalize_images)
         # update history buffer with latest state. shift all states one to the left and add latest state at end.
         for h_idx in range(state_dim[0], state_dim[0] * history_length, state_dim[0]):
-            history_buffer[(h_idx-state_dim[0]):h_idx] = history_buffer[h_idx:(h_idx+state_dim[0])]
-        history_buffer[state_dim[0]*(history_length-1):] = next_state
+            history_buffer[(h_idx - state_dim[0]):h_idx] = history_buffer[h_idx:(h_idx + state_dim[0])]
+        history_buffer[state_dim[0] * (history_length - 1):] = next_state
 
         if agent.intrinsic:
             with torch.no_grad():
                 _, _, r_i, _ = agent.intrinsic_reward_generator.compute_intrinsic_reward(history_buffer_old,
                                                                                          np.array([action]),
-                                                                                         history_buffer[np.newaxis, ...])
+                                                                                         history_buffer[
+                                                                                             np.newaxis, ...])
 
         if do_training:
             # when initially added, a transition gets assigned a high priority, such that it gets replayed at least once
@@ -103,7 +106,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
-                 history_length, rendering, max_timesteps, normalize_images, state_dim, init_prio):
+                 history_length, rendering, max_timesteps, normalize_images, state_dim, init_prio, num_model_files):
     print("... train agent")
 
     if type(env) == DoomEnv:
@@ -147,7 +150,11 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
 
         # store model.
         if episode_idx % eval_cycle == 0 or episode_idx >= (num_episodes - 1):
-            model_dir = agent.save(os.path.join(writer.logdir, "agent.pt"))
+            model_files = glob.glob(os.path.join(writer.logdir, "agent*"))
+            if len(model_files) > num_model_files - 1:
+                # Delete the oldest model file
+                os.remove(model_files[0])
+            model_dir = agent.save(os.path.join(writer.logdir, "agent_{}.pt".format(episode_idx)))
             print("Model saved in file: %s" % model_dir)
 
         # training episode
@@ -185,29 +192,37 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                     obs_sector_prob[k] = ((cord_x, cord_y), visited_sectors.get(k, 0) / total_visits)
                     obs_dist_sig[index] = np.array([visited_sectors.get(k, 0) / total_visits, cord_x, cord_y])
                     if cumulative_obs_sector_total_visits > 0:
-                        cumulative_obs_dist_sig[index] = np.array([(cumulative_obs_sector_visits.get(k, (0, 0))[1] / cumulative_obs_sector_total_visits), cord_x, cord_y])
+                        cumulative_obs_dist_sig[index] = np.array(
+                            [(cumulative_obs_sector_visits.get(k, (0, 0))[1] / cumulative_obs_sector_total_visits),
+                             cord_x, cord_y])
 
                 if cumulative_obs_sector_total_visits > 0:
                     dist, _, _ = cv2.EMD(obs_dist_sig, cumulative_obs_dist_sig, cv2.DIST_L2)
-                    writer.add_scalar('wasserstein_distance (current trajectory vs past trajectories)', dist, global_step=episode_idx)
+                    writer.add_scalar('wasserstein_distance (current trajectory vs past trajectories)', dist,
+                                      global_step=episode_idx)
 
                 for index, (k, sector) in enumerate(sorted(sector_bbs.items())):
                     cord_x = int(sector['cog'][0] - map_x_min)
                     cord_y = int(sector['cog'][1] - map_y_min)
-                    cumulative_obs_sector_visits[k] = ((cord_x, cord_y), cumulative_obs_sector_visits.get(k, (0, 0))[1] + visited_sectors.get(k, 0))
+                    cumulative_obs_sector_visits[k] = (
+                    (cord_x, cord_y), cumulative_obs_sector_visits.get(k, (0, 0))[1] + visited_sectors.get(k, 0))
                 cumulative_obs_sector_total_visits += total_visits
 
                 current_cumulative_obs_dist_sig = np.empty((len(sector_bbs), 3), dtype=np.float32)
                 for index, (k, sector) in enumerate(sorted(sector_bbs.items())):
                     cord_x = int(sector['cog'][0] - map_x_min)
                     cord_y = int(sector['cog'][1] - map_y_min)
-                    current_cumulative_obs_dist_sig[index] = np.array([cumulative_obs_sector_visits.get(k, (0, 0))[1] / cumulative_obs_sector_total_visits, cord_x, cord_y])
+                    current_cumulative_obs_dist_sig[index] = np.array(
+                        [cumulative_obs_sector_visits.get(k, (0, 0))[1] / cumulative_obs_sector_total_visits, cord_x,
+                         cord_y])
 
                 dist, _, _ = cv2.EMD(obs_dist_sig, uniform_dist_sig, cv2.DIST_L2)
-                writer.add_scalar('wasserstein_distance (current trajectory vs uniform disttribution)', dist, global_step=episode_idx)
+                writer.add_scalar('wasserstein_distance (current trajectory vs uniform disttribution)', dist,
+                                  global_step=episode_idx)
 
                 dist, _, _ = cv2.EMD(current_cumulative_obs_dist_sig, uniform_dist_sig, cv2.DIST_L2)
-                writer.add_scalar('wasserstein_distance (cumulative trajectory vs uniform disttribution)', dist, global_step=episode_idx)
+                writer.add_scalar('wasserstein_distance (cumulative trajectory vs uniform disttribution)', dist,
+                                  global_step=episode_idx)
             else:
                 writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, None),
                                   global_step=episode_idx)
