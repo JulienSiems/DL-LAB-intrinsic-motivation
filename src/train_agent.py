@@ -94,7 +94,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
-    args_for_filename = ['environment', 'extrinsic', 'intrinsic', 'fixed_encoder', 'ddqn', 'duelling', 'iqn',
+    args_for_filename = ['environment', 'map', 'extrinsic', 'intrinsic', 'fixed_encoder', 'ddqn', 'duelling', 'iqn',
                          'experience_replay', 'soft_update', 'n_step_reward']
     if environment == envs[0]:
         from vizdoom_env.vizdoom_env import DoomEnv
