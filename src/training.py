@@ -125,6 +125,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             uniform_sector_prob[k] = ((cord_x, cord_y), sector['area'] / map_total_area)
             uniform_dist_sig[index] = np.array([sector['area'] / map_total_area, cord_x, cord_y])
         # uniform_dist_sig = arr_to_sig(uniform_dist)
+        cumulative_obs_sector_visits = {}
+        cumulative_obs_sector_total_visits = 0
 
     for episode_idx in range(num_episodes):
         # EVALUATION
@@ -176,13 +178,36 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                 total_visits = sum([count for _, count in visited_sectors.items()])
                 obs_sector_prob = {}
                 obs_dist_sig = np.empty((len(sector_bbs), 3), dtype=np.float32)
+                cumulative_obs_dist_sig = np.empty((len(sector_bbs), 3), dtype=np.float32)
                 for index, (k, sector) in enumerate(sorted(sector_bbs.items())):
                     cord_x = int(sector['cog'][0] - map_x_min)
                     cord_y = int(sector['cog'][1] - map_y_min)
                     obs_sector_prob[k] = ((cord_x, cord_y), visited_sectors.get(k, 0) / total_visits)
                     obs_dist_sig[index] = np.array([visited_sectors.get(k, 0) / total_visits, cord_x, cord_y])
+                    if cumulative_obs_sector_total_visits > 0:
+                        cumulative_obs_dist_sig[index] = np.array([(cumulative_obs_sector_visits.get(k, (0, 0))[1] / cumulative_obs_sector_total_visits), cord_x, cord_y])
+
+                if cumulative_obs_sector_total_visits > 0:
+                    dist, _, _ = cv2.EMD(obs_dist_sig, cumulative_obs_dist_sig, cv2.DIST_L2)
+                    writer.add_scalar('wasserstein_distance (current trajectory vs past trajectories)', dist, global_step=episode_idx)
+
+                for index, (k, sector) in enumerate(sorted(sector_bbs.items())):
+                    cord_x = int(sector['cog'][0] - map_x_min)
+                    cord_y = int(sector['cog'][1] - map_y_min)
+                    cumulative_obs_sector_visits[k] = ((cord_x, cord_y), cumulative_obs_sector_visits.get(k, (0, 0))[1] + visited_sectors.get(k, 0))
+                cumulative_obs_sector_total_visits += total_visits
+
+                current_cumulative_obs_dist_sig = np.empty((len(sector_bbs), 3), dtype=np.float32)
+                for index, (k, sector) in enumerate(sorted(sector_bbs.items())):
+                    cord_x = int(sector['cog'][0] - map_x_min)
+                    cord_y = int(sector['cog'][1] - map_y_min)
+                    current_cumulative_obs_dist_sig[index] = np.array([cumulative_obs_sector_visits.get(k, (0, 0))[1] / cumulative_obs_sector_total_visits, cord_x, cord_y])
+
                 dist, _, _ = cv2.EMD(obs_dist_sig, uniform_dist_sig, cv2.DIST_L2)
-                writer.add_scalar('wasserstein_distance', dist, global_step=episode_idx)
+                writer.add_scalar('wasserstein_distance (current trajectory vs uniform disttribution)', dist, global_step=episode_idx)
+
+                dist, _, _ = cv2.EMD(current_cumulative_obs_dist_sig, uniform_dist_sig, cv2.DIST_L2)
+                writer.add_scalar('wasserstein_distance (cumulative trajectory vs uniform disttribution)', dist, global_step=episode_idx)
             else:
                 writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, None),
                                   global_step=episode_idx)
