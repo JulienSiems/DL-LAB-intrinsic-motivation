@@ -16,7 +16,7 @@ import click
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-envs = ['VizDoom', 'Mario', 'GridWorld', 'Pong']
+envs = ['VizDoom', 'Mario', 'GridWorld', 'Pong', 'CartPole', 'CarRacing']
 maps = {
     envs[0]: ['my_way_home_org', 'my_way_home_spwnhard', 'my_way_home_spwnhard_nogoal']
 }
@@ -25,7 +25,7 @@ maps = {
 @click.command()
 @click.option('-ne', '--num_episodes', default=10000, type=click.INT, help='train for ... episodes')
 @click.option('-ec', '--eval_cycle', default=100, type=click.INT, help='evaluate every ... episodes')
-@click.option('-nee', '--num_eval_episodes', default=5, type=click.INT, help='evaluate this many epochs')
+@click.option('-nee', '--num_eval_episodes', default=1, type=click.INT, help='evaluate this many epochs')
 @click.option('-tens', '--train_every_n_steps', default=4, type=click.INT)
 @click.option('-tnt', '--train_n_times', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
@@ -106,6 +106,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
                                                 args_for_filename=args_for_filename)
         # placeholder for non uniform action probabilities. change to something sensible if wanted.
         nu_action_probs = np.ones(env.action_space.n, dtype=np.float32) / env.action_space.n
+        num_actions = env.action_space.n
     else:
         if virtual_display:
             if render_training:
@@ -126,6 +127,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
             writer = setup_experiment_folder_writer(inspect.currentframe(), name='Mario', log_dir='mario',
                                                     args_for_filename=args_for_filename)
             nu_action_probs = np.ones(env.action_space.n, dtype=np.float32) / env.action_space.n
+            num_actions = env.action_space.n
         elif environment == envs[2]:
             import gym_minigrid
             from src.train_gridworld import ClassicalGridworldWrapper
@@ -135,16 +137,30 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
             writer = setup_experiment_folder_writer(inspect.currentframe(), name='GridWorld', log_dir='gridworld',
                                                     args_for_filename=args_for_filename)
             nu_action_probs = np.ones(env.action_space.n, dtype=np.float32) / env.action_space.n
+            num_actions = env.action_space.n
         elif environment == envs[3]:
             import gym
             env = gym.make('Pong-v0')
             writer = setup_experiment_folder_writer(inspect.currentframe(), name='Pong', log_dir='pong',
                                                     args_for_filename=args_for_filename)
             nu_action_probs = np.ones(env.action_space.n, dtype=np.float32) / env.action_space.n
+            num_actions = env.action_space.n
+        elif environment == envs[4]:
+            import gym
+            env = gym.make("CartPole-v0").unwrapped
+            writer = setup_experiment_folder_writer(inspect.currentframe(), name='CartPole', log_dir='cartpole',
+                                                    args_for_filename=args_for_filename)
+            nu_action_probs = np.ones(env.action_space.n, dtype=np.float32) / env.action_space.n
+            num_actions = env.action_space.n
+        elif environment == envs[5]:
+            import gym
+            env = gym.make('CarRacing-v0').unwrapped
+            writer = setup_experiment_folder_writer(inspect.currentframe(), name='CarRacing', log_dir='carracing',
+                                                    args_for_filename=args_for_filename)
+            nu_action_probs = [0.45, 0.15, 0.15, 0.15, 0.1]
+            num_actions = 5
         else:
             raise NotImplementedError()
-
-    num_actions = env.action_space.n
 
     channels = 1  # greyscale images
     state_dim = (channels, state_height, state_width)  # not taking history_length into account. handled later.

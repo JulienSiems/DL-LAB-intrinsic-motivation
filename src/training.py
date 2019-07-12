@@ -47,6 +47,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         # get action from agent every (skip_frames + 1) frames when training or every frame when not training
         if step % (skip_frames + 1) == 0 or not do_training:
             action = int(agent.act(state=history_buffer, deterministic=deterministic))
+            action = id_to_action(action)
 
         next_state, reward, done, info = env.step(action)
 
@@ -80,7 +81,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
         if do_training:
             # when initially added, a transition gets assigned a high priority, such that it gets replayed at least once
-            agent.replay_buffer.add_transition(state, action, reward, next_state, done, beginning, init_prio)
+            agent.replay_buffer.add_transition(state, action_to_id(action), reward, next_state, done, beginning,
+                                               init_prio)
 
             losses = agent.train()
             if losses[0] is not None:
@@ -133,8 +135,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         cumulative_obs_sector_visits = {}
         cumulative_obs_sector_total_visits = 0
 
-    # Initialize the coverage metric
-    coverage_metrics = Coverage(num_sectors=len(uniform_sector_prob))
+        # Initialize the coverage metric
+        coverage_metrics = Coverage(num_sectors=len(uniform_sector_prob))
 
     for episode_idx in range(num_episodes):
         # EVALUATION
@@ -258,7 +260,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         writer.add_scalar('train_episode_reward', stats.episode_reward, global_step=episode_idx)
         writer.add_scalar('train_episode_length', stats.steps, global_step=episode_idx)
         writer.add_scalar('intrinsic_episode_reward', stats.intrinsic_reward, global_step=episode_idx)
-        for action in range(env.action_space.n):
+        for action in range(5):
             writer.add_scalar('train_{}'.format(action), stats.get_action_usage(action), global_step=episode_idx)
 
 
