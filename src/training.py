@@ -108,7 +108,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
                  history_length, rendering, max_timesteps, normalize_images, state_dim, init_prio, num_model_files,
-                 simple_coverage_threshold, geometric_coverage_gamma):
+                 simple_coverage_threshold, geometric_coverage_gamma, num_total_steps, store_cycle):
     print("... train agent")
 
     if type(env) == DoomEnv:
@@ -136,10 +136,21 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
     # Initialize the coverage metric
     coverage_metrics = Coverage(num_sectors=len(uniform_sector_prob))
 
+    # practically infinite episodes if num_episodes is not >= 1. also add 1 to num_episodes because agent is not trained
+    # for last episode. this way, agent is evaluated num_episodes + 1 times but trained num_episodes times
+    # (only matters if num_episodes is the determining criterion for number of runs)
+    num_episodes = num_episodes + 1 if num_episodes >= 1 else sys.maxsize
+
+    # quite similar to num_total_steps
+    num_total_steps = num_total_steps if num_total_steps >= 1 else sys.maxsize
+
+    total_steps = 0
     for episode_idx in range(num_episodes):
+        is_last_episode = episode_idx >= (num_episodes - 1) or total_steps >= num_total_steps
+
         # EVALUATION
         # check its performance with greedy actions only
-        if episode_idx % eval_cycle == 0:
+        if eval_cycle >= 1 and (episode_idx % eval_cycle == 0 or is_last_episode):
             stats = []
             for j in range(num_eval_episodes):
                 stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=max_timesteps,
@@ -154,7 +165,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             writer.add_scalar('val_episode_reward_std', episode_reward_std, global_step=episode_idx)
 
         # store model.
-        if episode_idx % eval_cycle == 0 or episode_idx >= (num_episodes - 1):
+        if store_cycle >= 1 and (episode_idx % store_cycle == 0 or is_last_episode):
             model_files = glob.glob(os.path.join(writer.logdir, "agent*"))
             # Sort by date
             model_files.sort(key=os.path.getmtime)
@@ -164,6 +175,9 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                 os.remove(model_files[0])
             model_dir = agent.save(os.path.join(writer.logdir, "agent_{}.pt".format(episode_idx)))
             print("Model saved in file: %s" % model_dir)
+
+        if is_last_episode:
+            break
 
         # training episode
         print("episode %d" % episode_idx)
@@ -260,6 +274,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         writer.add_scalar('intrinsic_episode_reward', stats.intrinsic_reward, global_step=episode_idx)
         for action in range(env.action_space.n):
             writer.add_scalar('train_{}'.format(action), stats.get_action_usage(action), global_step=episode_idx)
+
+        total_steps += stats.steps
 
 
 def state_preprocessing(state, height, width, normalize=True):

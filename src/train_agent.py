@@ -23,9 +23,11 @@ maps = {
 
 
 @click.command()
-@click.option('-ne', '--num_episodes', default=10000, type=click.INT, help='train for ... episodes')
-@click.option('-ec', '--eval_cycle', default=100, type=click.INT, help='evaluate every ... episodes')
-@click.option('-nee', '--num_eval_episodes', default=5, type=click.INT, help='evaluate this many epochs')
+@click.option('-ne', '--num_episodes', default=10000, type=click.INT, help='train for n episodes (0 to disable)')
+@click.option('-nts', '--num_total_steps', default=0, type=click.INT, help='train for n steps total (0 to disable)')
+@click.option('-ec', '--eval_cycle', default=100, type=click.INT, help='evaluate every n episodes (0 to disable)')
+@click.option('-nee', '--num_eval_episodes', default=5, type=click.INT, help='each evaluation is over n episodes')
+@click.option('-sc', '--store_cycle', default=100, type=click.INT, help='save model every n episodes (0 to disable)')
 @click.option('-tens', '--train_every_n_steps', default=4, type=click.INT)
 @click.option('-tnt', '--train_n_times', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
@@ -93,7 +95,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
          pre_intrinsic, experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay,
          init_prio, fixed_encoder, duelling, iqn, iqn_n, iqn_np, iqn_k, iqn_tau_embed_dim, iqn_det_max_train,
          iqn_det_max_act, huber_kappa, state_height, state_width, number_model_files, simple_coverage_threshold,
-         geometric_coverage_gamma):
+         geometric_coverage_gamma, num_total_steps, store_cycle):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
@@ -201,7 +203,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
                  history_length=history_length, rendering=render_training, max_timesteps=max_timesteps,
                  normalize_images=normalize_images, state_dim=state_dim, init_prio=init_prio,
                  num_model_files=number_model_files, simple_coverage_threshold=simple_coverage_threshold,
-                 geometric_coverage_gamma=geometric_coverage_gamma)
+                 geometric_coverage_gamma=geometric_coverage_gamma, num_total_steps=num_total_steps,
+                 store_cycle=store_cycle)
     writer.close()
 
 
