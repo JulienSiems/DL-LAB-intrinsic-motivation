@@ -83,8 +83,6 @@ def id_to_action(action_id, max_speed=0.8):
     this method makes actions continous.
     Important: this method only works if you recorded data pressing only one key at a time!
     """
-    a = np.array([0.0, 0.0, 0.0])
-
     if action_id == LEFT:
         return np.array([-1.0, 0.0, 0.05])
     elif action_id == RIGHT:

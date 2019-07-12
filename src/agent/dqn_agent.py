@@ -133,7 +133,7 @@ class DQNAgent:
             batch_states = batch_state_sequences[:, 0, ...]
             batch_imm_next_states = batch_state_sequences[:, 1, ...]  # immediate next states for ICM module
             batch_next_states = batch_state_sequences[(self.batch_size_range, actual_n_steps)]
-            batch_actions = np.array([action_to_id(action) for action in batch_actions])
+            batch_actions = batch_actions[:, 0]
             batch_rewards = np.sum(batch_rewards * self.reward_gamma_mask, axis=1)
             batch_dones = batch_dones[(self.batch_size_range, actual_n_steps - 1)]
             weights = torch.from_numpy(weights).detach().to(device)

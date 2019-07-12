@@ -46,8 +46,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     while not done and step < max_timesteps:
         # get action from agent every (skip_frames + 1) frames when training or every frame when not training
         if step % (skip_frames + 1) == 0 or not do_training:
-            action = int(agent.act(state=history_buffer, deterministic=deterministic))
-            action = id_to_action(action)
+            action_id = int(agent.act(state=history_buffer, deterministic=deterministic))
+            action = id_to_action(action_id)
 
         next_state, reward, done, info = env.step(action)
 
@@ -75,14 +75,13 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         if agent.intrinsic:
             with torch.no_grad():
                 _, _, r_i, _ = agent.intrinsic_reward_generator.compute_intrinsic_reward(history_buffer_old,
-                                                                                         np.array([action]),
+                                                                                         np.array([action_id]),
                                                                                          history_buffer[
                                                                                              np.newaxis, ...])
 
         if do_training:
             # when initially added, a transition gets assigned a high priority, such that it gets replayed at least once
-            agent.replay_buffer.add_transition(state, action_to_id(action), reward, next_state, done, beginning,
-                                               init_prio)
+            agent.replay_buffer.add_transition(state, action_id, reward, next_state, done, beginning, init_prio)
 
             losses = agent.train()
             if losses[0] is not None:
@@ -97,7 +96,7 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             if step % 100 == 0:
                 print('loss', loss)
 
-        stats.step(reward, r_i.item() * agent.mu if agent.intrinsic else 0.0, action)
+        stats.step(reward, r_i.item() * agent.mu if agent.intrinsic else 0.0, action_id)
         state = next_state
         step += 1
         beginning = False

@@ -43,7 +43,7 @@ maps = {
 @click.option('-env', '--environment', default=envs[0], type=click.Choice(envs))
 @click.option('-mp', '--map', default=maps[envs[0]][0], type=click.Choice(maps[envs[0]]))
 @click.option('-rt', '--render_training', default=False, type=click.BOOL)
-@click.option('-mt', '--max_timesteps', default=2100, type=click.INT)
+@click.option('-mt', '--max_timesteps', default=1000, type=click.INT)
 @click.option('-ni', '--normalize_images', default=True, type=click.BOOL)
 @click.option('-nu', '--non_uniform_sampling', default=False, type=click.BOOL)
 @click.option('-nsr', '--n_step_reward', default=3, type=click.INT)
