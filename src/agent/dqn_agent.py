@@ -20,7 +20,7 @@ class DQNAgent:
                  experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, init_prio,
                  state_dim, iqn, iqn_n, iqn_np, iqn_k, iqn_det_max_train, iqn_det_max_act, huber_kappa, epsilon, tau,
                  n_step_reward, train_every_n_steps, train_n_times, non_uniform_sampling, gamma, batch_size,
-                 soft_update, ddqn, epsilon_schedule, pre_intrinsic, nu_action_probs, *args, **kwargs):
+                 soft_update, ddqn, epsilon_schedule, pre_intrinsic, nu_action_probs, adam_epsilon, *args, **kwargs):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -51,7 +51,7 @@ class DQNAgent:
         parameters = set()
         for net in nets:
             parameters |= set(net.parameters())
-        self.optimizer = torch.optim.Adam(parameters, lr=lr)
+        self.optimizer = torch.optim.Adam(parameters, lr=lr, eps=adam_epsilon)
 
         # define replay buffer
         tmp_state_shape = tuple([1, state_dim[0], state_dim[1], state_dim[2]])
@@ -77,7 +77,6 @@ class DQNAgent:
         self.batch_size_range = np.arange(self.batch_size)
         self.gamma = gamma
         self.tau = tau
-        self.epsilon = epsilon
         self.mu = mu
         self.beta = beta
         self.lambda_intrinsic = lambda_intrinsic
@@ -98,6 +97,7 @@ class DQNAgent:
 
         self.ddqn = ddqn
 
+        self.cur_epsilon = epsilon_start if epsilon_schedule else epsilon
         self.epsilon_schedule = epsilon_schedule
         self.epsilon_start = epsilon_start
         self.epsilon_end = epsilon_end
@@ -115,13 +115,18 @@ class DQNAgent:
         self.huber_kappa = huber_kappa
 
     def train(self):
+        # advance prioritized experience replay beta
+        interpolate_b = min(1.0, self.train_steps / self.prio_er_beta_decay)
+        self.cur_prio_er_beta = self.prio_er_beta_start * (1.0 - interpolate_b) + self.prio_er_beta_end * interpolate_b
+
+        # advance exploration epsilon
+        if self.epsilon_schedule:
+            interpolate_eps = min(1.0, self.train_steps / self.epsilon_decay)
+            self.cur_epsilon = self.epsilon_start * (1.0 - interpolate_eps) + self.epsilon_end * interpolate_eps
+
         if self.train_steps % self.train_every_n_steps != 0 or self.batch_size > self.replay_buffer.size:
             self.train_steps += 1
             return None, None, None, None
-
-        # advance prioritized experience replay beta
-        interpolate_b = min(1.0, self.train_steps_done / self.prio_er_beta_decay)
-        self.cur_prio_er_beta = self.prio_er_beta_start * (1.0 - interpolate_b) + self.prio_er_beta_end * interpolate_b
 
         for train_iter_idx in range(self.train_n_times):
             self.optimizer.zero_grad()
@@ -271,37 +276,27 @@ class DQNAgent:
         Returns:
             action id
         """
-        if self.epsilon_schedule:
-            # Like in pytorch tutorial https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
-            eps_threshold = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * \
-                            np.exp(-1. * self.steps_done / self.epsilon_decay)
-        else:
-            eps_threshold = self.epsilon
-        self.eps_threshold = eps_threshold
-
-        sample = random.random()
-        if deterministic or sample > eps_threshold:
-            with torch.no_grad():
-                # take greedy action (argmax)
-                state_ = torch.from_numpy(np.expand_dims(state, 0)).to(device).float()
-                if self.iqn:
-                    # for IQN we have to sample from reward distribution to determine greedy action
-                    if self.iqn_det_max_act:
-                        taus = torch.linspace(0.0, 1.0, steps=self.iqn_k + 2, dtype=torch.float, device=device)
-                        taus = taus[1:-1].view(1, self.iqn_k)
-                    else:
-                        taus = torch.rand(size=(1, self.iqn_k), dtype=torch.float, device=device)
-                    pred = self.Q(state_, taus=taus)
-                    action_id = torch.argmax(pred.mean(dim=0)).detach().cpu().numpy()
+        with torch.no_grad():
+            state_ = torch.from_numpy(np.expand_dims(state, 0)).to(device).float()
+            if self.iqn:
+                # for IQN we have to sample from reward distribution to determine action values
+                if self.iqn_det_max_act:
+                    taus = torch.linspace(0.0, 1.0, steps=self.iqn_k + 2, dtype=torch.float, device=device)
+                    taus = taus[1:-1].view(1, self.iqn_k)
                 else:
-                    pred = self.Q(state_)
-                    action_id = torch.argmax(pred).detach().cpu().numpy()
-        else:
-            if self.non_uniform_sampling:
-                action_id = np.random.choice(self.num_actions, size=(1,), p=self.nu_action_probs)[0]
+                    taus = torch.rand(size=(1, self.iqn_k), dtype=torch.float, device=device)
+                pred = self.Q(state_, taus=taus).mean(dim=0)
             else:
-                action_id = np.random.randint(self.num_actions, size=(1,))
-        return action_id
+                pred = self.Q(state_)
+            if deterministic or random.random() > self.cur_epsilon:
+                # take greedy action (argmax)
+                action_id = torch.argmax(pred).detach().cpu().numpy()
+            else:
+                if self.non_uniform_sampling:
+                    action_id = np.random.choice(self.num_actions, size=(1,), p=self.nu_action_probs)[0]
+                else:
+                    action_id = np.random.randint(self.num_actions, size=(1,))
+        return action_id, pred.detach().cpu().numpy()
 
     def save(self, file_name):
         torch.save(self.Q.state_dict(), file_name)

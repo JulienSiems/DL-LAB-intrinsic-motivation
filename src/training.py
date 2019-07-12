@@ -37,7 +37,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     for h_idx in range(0, state_dim[0] * history_length, state_dim[0]):
         history_buffer[h_idx] = state
 
-    loss, td_loss, L_I, L_F = 0.0, 0.0, 0.0, 0.0
+    losses = []  # each entry like (loss, td_loss, L_I, L_F)
+    action_values = []
     trajectory = []
     if type(env) == DoomEnv:
         sector_bbs = create_sector_bounding_box(env.state.sectors)
@@ -46,7 +47,9 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
     while not done and step < max_timesteps:
         # get action from agent every (skip_frames + 1) frames when training or every frame when not training
         if step % (skip_frames + 1) == 0 or not do_training:
-            action = int(agent.act(state=history_buffer, deterministic=deterministic))
+            act_res = agent.act(state=history_buffer, deterministic=deterministic)
+            action = int(act_res[0])
+            action_values.append(act_res[1].flatten())
 
         next_state, reward, done, info = env.step(action)
 
@@ -82,9 +85,9 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             # when initially added, a transition gets assigned a high priority, such that it gets replayed at least once
             agent.replay_buffer.add_transition(state, action, reward, next_state, done, beginning, init_prio)
 
-            losses = agent.train()
-            if losses[0] is not None:
-                loss, td_loss, L_I, L_F = losses
+            train_res = agent.train()
+            if train_res[0] is not None:
+                losses.append(train_res)
 
             # update the target network
             agent.steps_done += 1
@@ -92,8 +95,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
                 print('updating Q_target')
                 agent.Q_target.load_state_dict(agent.Q.state_dict())
 
-            if step % 100 == 0:
-                print('loss', loss)
+            if (step + 1) % 100 == 0:
+                print('step: {}\tloss: {:.4f}\ttd_loss: {:.4f}\tL_I: {:.4f}\tL_F: {:.4f}'.format(step + 1, *losses[-1]))
 
         stats.step(reward, r_i.item() * agent.mu if agent.intrinsic else 0.0, action)
         state = next_state
@@ -101,9 +104,9 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
         beginning = False
 
     if type(env) == DoomEnv:
-        return stats, loss, td_loss, L_I, L_F, info, trajectory, env.state.sectors, visited_sectors, sector_bbs
+        return stats, losses, info, trajectory, action_values, env.state.sectors, visited_sectors, sector_bbs
     else:
-        return stats, loss, td_loss, L_I, L_F, info, trajectory, None, None, None
+        return stats, losses, info, trajectory, action_values, None, None, None
 
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
@@ -132,9 +135,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         # uniform_dist_sig = arr_to_sig(uniform_dist)
         cumulative_obs_sector_visits = {}
         cumulative_obs_sector_total_visits = 0
-
-    # Initialize the coverage metric
-    coverage_metrics = Coverage(num_sectors=len(uniform_sector_prob))
+        # Initialize the coverage metric
+        coverage_metrics = Coverage(num_sectors=len(uniform_sector_prob))
 
     # practically infinite episodes if num_episodes is not >= 1. also add 1 to num_episodes because agent is not trained
     # for last episode. this way, agent is evaluated num_episodes + 1 times but trained num_episodes times
@@ -182,7 +184,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         # training episode
         print("episode %d" % episode_idx)
         max_timesteps_current = max_timesteps
-        stats, loss, td_loss, L_I, L_F, info, trajectory, \
+        stats, losses, info, trajectory, action_values, \
         sectors, visited_sectors, sector_bbs = run_episode(env, agent, max_timesteps=max_timesteps_current,
                                                            deterministic=False,
                                                            do_training=True,
@@ -266,15 +268,17 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
             if type(value) is not str:
                 writer.add_scalar('info_{}'.format(key), value, global_step=episode_idx)
 
-        writer.add_scalar('train_loss', loss, global_step=episode_idx)
-        writer.add_scalar('train_td_loss', td_loss, global_step=episode_idx)
-        writer.add_scalar('train_l_i', L_I, global_step=episode_idx)
-        writer.add_scalar('train_l_f', L_F, global_step=episode_idx)
+        writer.add_scalar('train_loss', np.mean([losses[i][0] for i in range(len(losses))]), global_step=episode_idx)
+        writer.add_scalar('train_td_loss', np.mean([losses[i][1] for i in range(len(losses))]), global_step=episode_idx)
+        writer.add_scalar('train_l_i', np.mean([losses[i][2] for i in range(len(losses))]), global_step=episode_idx)
+        writer.add_scalar('train_l_f', np.mean([losses[i][3] for i in range(len(losses))]), global_step=episode_idx)
         writer.add_scalar('train_episode_reward', stats.episode_reward, global_step=episode_idx)
         writer.add_scalar('train_episode_length', stats.steps, global_step=episode_idx)
         writer.add_scalar('intrinsic_episode_reward', stats.intrinsic_reward, global_step=episode_idx)
         for action in range(env.action_space.n):
-            writer.add_scalar('train_{}'.format(action), stats.get_action_usage(action), global_step=episode_idx)
+            writer.add_scalar('action_freq_{}'.format(action), stats.get_action_usage(action), global_step=episode_idx)
+            mean_action_value = np.mean([action_values[i][action] for i in range(len(action_values))])
+            writer.add_scalar('action_val_{}'.format(action), mean_action_value, global_step=episode_idx)
 
         total_steps += stats.steps
 

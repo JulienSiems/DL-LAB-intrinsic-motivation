@@ -32,6 +32,7 @@ maps = {
 @click.option('-tnt', '--train_n_times', default=1, type=click.INT)
 @click.option('-bs', '--batch_size', default=32, type=click.INT)
 @click.option('-lr', '--learning_rate', default=1e-3, type=click.FLOAT)
+@click.option('-adep', '--adam_epsilon', default=1.5e-4, type=click.FLOAT)
 @click.option('-ac', '--activation', default='ReLU', type=click.Choice(['ReLU', 'ELU', 'LeakyReLU']))
 @click.option('-ca', '--capacity', default=2 ** 19, type=click.INT)
 @click.option('-g', '--gamma', default=0.9999, type=click.FLOAT)
@@ -59,9 +60,9 @@ maps = {
 @click.option('-uq', '--update_q_target', default=10000, type=click.INT,
               help='How many steps to pass between each q_target update')
 @click.option('-es', '--epsilon_schedule', default=False, type=click.BOOL)
-@click.option('-est', '--epsilon_start', default=0.9, type=click.FLOAT)
-@click.option('-end', '--epsilon_end', default=0.05, type=click.FLOAT)
-@click.option('-edc', '--epsilon_decay', default=30000, type=click.INT)
+@click.option('-est', '--epsilon_start', default=1.0, type=click.FLOAT)
+@click.option('-end', '--epsilon_end', default=0.01, type=click.FLOAT)
+@click.option('-edc', '--epsilon_decay', default=250000, type=click.INT)
 @click.option('-vdy', '--virtual_display', default=False, type=click.BOOL)
 @click.option('-s', '--seed', default=0, type=click.INT)
 @click.option('-pre_icm', '--pre_intrinsic', default=False, type=click.BOOL)
@@ -69,7 +70,7 @@ maps = {
 @click.option('-per_a', '--prio_er_alpha', default=0.6, type=click.FLOAT)
 @click.option('-per_bs', '--prio_er_beta_start', default=0.4, type=click.FLOAT)
 @click.option('-per_be', '--prio_er_beta_end', default=1.0, type=click.FLOAT)
-@click.option('-per_bdc', '--prio_er_beta_decay', default=1000000, type=click.INT)
+@click.option('-per_bdc', '--prio_er_beta_decay', default=250000, type=click.INT)
 @click.option('-ip', '--init_prio', default=500.0, type=click.FLOAT)
 @click.option('-fe', '--fixed_encoder', default=False, type=click.BOOL)
 @click.option('-du', '--duelling', default=False, type=click.BOOL)
@@ -95,7 +96,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
          pre_intrinsic, experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay,
          init_prio, fixed_encoder, duelling, iqn, iqn_n, iqn_np, iqn_k, iqn_tau_embed_dim, iqn_det_max_train,
          iqn_det_max_act, huber_kappa, state_height, state_width, number_model_files, simple_coverage_threshold,
-         geometric_coverage_gamma, num_total_steps, store_cycle):
+         geometric_coverage_gamma, num_total_steps, store_cycle, adam_epsilon):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
@@ -196,7 +197,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
                      prio_er_beta_start=prio_er_beta_start, prio_er_beta_end=prio_er_beta_end, init_prio=init_prio,
                      prio_er_beta_decay=prio_er_beta_decay, state_dim=state_dim, iqn=iqn, iqn_n=iqn_n, iqn_np=iqn_np,
                      iqn_k=iqn_k, iqn_det_max_train=iqn_det_max_train, iqn_det_max_act=iqn_det_max_act,
-                     nu_action_probs=nu_action_probs)
+                     nu_action_probs=nu_action_probs, adam_epsilon=adam_epsilon)
 
     train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
                  num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,
