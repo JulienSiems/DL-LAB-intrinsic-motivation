@@ -199,7 +199,8 @@ def create_sector_bounding_box(sectors):
         #         last_vertices = [[line.x1, line.y1], [line.x2, line.y2]]
 
         sector_bbs['section_{}'.format(i)] = {
-            'x_min': x_min, 'x_max': x_max, 'y_min': y_min, 'y_max': y_max, 'area': (x_max - x_min) * (y_max - y_min), 'cog': ((x_max + x_min) / 2, (y_max + y_min) / 2)
+            'x_min': x_min, 'x_max': x_max, 'y_min': y_min, 'y_max': y_max, 'area': (x_max - x_min) * (y_max - y_min),
+            'cog': ((x_max + x_min) / 2, (y_max + y_min) / 2)
         }
 
     # TODO: Calculate area of non rectangular rooms. Currently fixed for vizdoom.
@@ -211,7 +212,7 @@ def create_sector_bounding_box(sectors):
 
 # https://stackoverflow.com/questions/24467972/calculate-area-of-polygon-given-x-y-coordinates
 def PolygonArea(corners):
-    n = len(corners) # of corners
+    n = len(corners)  # of corners
     area = 0.0
     for i in range(n):
         j = (i + 1) % n
@@ -219,6 +220,26 @@ def PolygonArea(corners):
         area -= corners[j][0] * corners[i][1]
     area = abs(area) / 2.0
     return area
+
+
+class Coverage:
+    def __init__(self, num_sectors: int):
+        self.num_sectors = num_sectors
+        self.visited_sectors_list = [0 for _ in range(num_sectors)]
+
+    def compute_coverage(self, visited_sectors: dict, K: int, gamma: float) -> int:
+        """Computes the coverage metrics outlined on slack."""
+        # Update the current list of visited sectors
+        self.visited_sectors_list = [
+            self.visited_sectors_list[i] + visited_sectors.get('section_{}'.format(i), 0) for i in
+            range(self.num_sectors)]
+
+        # Compute simple coverage
+        covered_sectors = list(map(lambda x: int(x >= K), self.visited_sectors_list))
+
+        # Compute geometric coverage
+        geometric_weighted_sectors = list(map(lambda x: 1 - gamma ** x, self.visited_sectors_list))
+        return sum(covered_sectors) / self.num_sectors, sum(geometric_weighted_sectors) / self.num_sectors
 
 
 def arr_to_sig(arr):

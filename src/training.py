@@ -107,7 +107,8 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
 
 
 def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
-                 history_length, rendering, max_timesteps, normalize_images, state_dim, init_prio, num_model_files):
+                 history_length, rendering, max_timesteps, normalize_images, state_dim, init_prio, num_model_files,
+                 simple_coverage_threshold, geometric_coverage_gamma):
     print("... train agent")
 
     if type(env) == DoomEnv:
@@ -131,6 +132,9 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         # uniform_dist_sig = arr_to_sig(uniform_dist)
         cumulative_obs_sector_visits = {}
         cumulative_obs_sector_total_visits = 0
+
+    # Initialize the coverage metric
+    coverage_metrics = Coverage(num_sectors=len(uniform_sector_prob))
 
     for episode_idx in range(num_episodes):
         # EVALUATION
@@ -182,6 +186,14 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                 writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, objects),
                                   global_step=episode_idx)
                 writer.add_scalar('num_visited_sectors', len(visited_sectors), global_step=episode_idx)
+
+                simple_coverage, geometric_coverage = \
+                    coverage_metrics.compute_coverage(visited_sectors=visited_sectors,
+                                                      K=simple_coverage_threshold * skip_frames,
+                                                      gamma=geometric_coverage_gamma)
+                writer.add_scalar('simple_coverage', simple_coverage, global_step=episode_idx)
+                writer.add_scalar('geometric_coverage', geometric_coverage, global_step=episode_idx)
+
                 writer.add_histogram('visited_sector_ids', [i for i in range(len(env.state.sectors)) if
                                                             'section_{}'.format(i) in visited_sectors.keys()],
                                      global_step=episode_idx)

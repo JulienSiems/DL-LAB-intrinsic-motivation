@@ -82,15 +82,18 @@ maps = {
 @click.option('-sh', '--state_height', default=42, type=click.INT)
 @click.option('-sw', '--state_width', default=42, type=click.INT)
 @click.option('-nmf', '--number_model_files', default=10, type=click.INT)
+@click.option('-sct', '--simple_coverage_threshold', default=10, type=click.INT,
+              help='Number of separate actions that are required in each segment to be counted as a visited segment.')
+@click.option('-gcg', '--geometric_coverage_gamma', default=.99, type=click.FLOAT)
 def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train_n_times, batch_size, learning_rate,
          capacity, gamma, epsilon, tau, soft_update, history_length, skip_frames, ddqn, model, environment, map,
          activation, render_training, max_timesteps, normalize_images, non_uniform_sampling, n_step_reward,
          mu_intrinsic, beta_intrinsic, lambda_intrinsic, intrinsic, residual_icm_forward, use_history_in_icm, extrinsic,
-         update_q_target, epsilon_schedule,
-         epsilon_start, epsilon_end, epsilon_decay, virtual_display, seed, pre_intrinsic, experience_replay,
-         prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, init_prio, fixed_encoder, duelling,
-         iqn, iqn_n, iqn_np, iqn_k, iqn_tau_embed_dim, iqn_det_max_train, iqn_det_max_act, huber_kappa, state_height,
-         state_width, number_model_files):
+         update_q_target, epsilon_schedule, epsilon_start, epsilon_end, epsilon_decay, virtual_display, seed,
+         pre_intrinsic, experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay,
+         init_prio, fixed_encoder, duelling, iqn, iqn_n, iqn_np, iqn_k, iqn_tau_embed_dim, iqn_det_max_train,
+         iqn_det_max_act, huber_kappa, state_height, state_width, number_model_files, simple_coverage_threshold,
+         geometric_coverage_gamma):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
@@ -197,7 +200,8 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
                  num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,
                  history_length=history_length, rendering=render_training, max_timesteps=max_timesteps,
                  normalize_images=normalize_images, state_dim=state_dim, init_prio=init_prio,
-                 num_model_files=number_model_files)
+                 num_model_files=number_model_files, simple_coverage_threshold=simple_coverage_threshold,
+                 geometric_coverage_gamma=geometric_coverage_gamma)
     writer.close()
 
 
