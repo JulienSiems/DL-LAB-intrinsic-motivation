@@ -201,12 +201,13 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                                   global_step=episode_idx)
                 writer.add_scalar('num_visited_sectors', len(visited_sectors), global_step=episode_idx)
 
-                simple_coverage, geometric_coverage = \
+                simple_coverage, geometric_coverage, occupancy_density_entropy = \
                     coverage_metrics.compute_coverage(visited_sectors=visited_sectors,
                                                       K=simple_coverage_threshold * skip_frames,
                                                       gamma=geometric_coverage_gamma)
                 writer.add_scalar('simple_coverage', simple_coverage, global_step=episode_idx)
                 writer.add_scalar('geometric_coverage', geometric_coverage, global_step=episode_idx)
+                writer.add_scalar('occupancy_density_entropy', occupancy_density_entropy, global_step=episode_idx)
 
                 writer.add_histogram('visited_sector_ids', [i for i in range(len(env.state.sectors)) if
                                                             'section_{}'.format(i) in visited_sectors.keys()],

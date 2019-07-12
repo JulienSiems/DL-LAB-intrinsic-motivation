@@ -11,6 +11,7 @@ import seaborn as sns
 import numpy as np
 import os
 from tensorboardX import SummaryWriter
+import math
 
 LEFT = 1
 RIGHT = 2
@@ -226,6 +227,7 @@ class Coverage:
     def __init__(self, num_sectors: int):
         self.num_sectors = num_sectors
         self.visited_sectors_list = [0 for _ in range(num_sectors)]
+        self.max_entropy = (1 / self.num_sectors) * math.log2(1 / self.num_sectors) * self.num_sectors
 
     def compute_coverage(self, visited_sectors: dict, K: int, gamma: float) -> int:
         """Computes the coverage metrics outlined on slack."""
@@ -239,7 +241,12 @@ class Coverage:
 
         # Compute geometric coverage
         geometric_weighted_sectors = list(map(lambda x: 1 - gamma ** x, self.visited_sectors_list))
-        return sum(covered_sectors) / self.num_sectors, sum(geometric_weighted_sectors) / self.num_sectors
+
+        # Compute Occupation Density Entropy
+        total_visits = sum(self.visited_sectors_list)
+        occupancy_density_entropy = list(map(lambda x: (x / total_visits) * math.log2(x / total_visits) if x != 0 else 0, self.visited_sectors_list))
+
+        return sum(covered_sectors) / self.num_sectors, sum(geometric_weighted_sectors) / self.num_sectors, sum(occupancy_density_entropy) / self.max_entropy
 
 
 def arr_to_sig(arr):
