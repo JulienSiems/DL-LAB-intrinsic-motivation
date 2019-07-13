@@ -241,8 +241,10 @@ class DQNAgent:
                 huber_loss = huber_case0 + huber_case1
                 td_losses = huber_loss.view(-1, self.iqn_np).mean(dim=1).view(self.batch_size, self.iqn_n).sum(dim=1)
             else:
-                # squared error
-                td_losses = (Q_pred_picked - td_target.detach()).pow(2)
+                # Huber loss
+                loss_fn = torch.nn.SmoothL1Loss(reduction='none')
+                td_losses = loss_fn(Q_pred_picked, td_target)
+                # td_losses = torch.nn.SmoothL1Loss(Q_pred_picked - td_target.detach()).pow(2)
 
             if self.intrinsic:
                 losses = self.lambda_intrinsic * td_losses + (1 - self.beta) * l_i + self.beta * r_i
