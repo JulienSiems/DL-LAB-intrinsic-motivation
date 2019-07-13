@@ -78,7 +78,7 @@ def action_to_id(a):
         return STRAIGHT  # STRAIGHT = 0
 
 
-def id_to_action(action_id, max_speed=0.8):
+def id_to_action(action_id, max_speed=0.4):
     """ 
     this method makes actions continous.
     Important: this method only works if you recorded data pressing only one key at a time!
