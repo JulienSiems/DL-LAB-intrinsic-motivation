@@ -18,7 +18,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 envs = ['VizDoom', 'Mario', 'GridWorld', 'Pong']
 maps = {
-    envs[0]: ['my_way_home_org', 'my_way_home_spwnhard', 'my_way_home_spwnhard_nogoal']
+    envs[0]: ['my_way_home_org', 'my_way_home_spwnhard', 'my_way_home_spwnhard_easy', 'my_way_home_spwnhard_nogoal']
 }
 
 

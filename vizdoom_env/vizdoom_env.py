@@ -6,6 +6,7 @@ from vizdoom import *
 DOOM_MAPS = [
     'my_way_home_org',
     'my_way_home_spwnhard',
+    'my_way_home_spwnhard_easy',
     'my_way_home_spwnhard_nogoal',
 ]
 
