@@ -120,7 +120,7 @@ class EpisodeStats:
         return len(ids[ids == action_id]) / len(ids)
 
 
-def plot_trajectory(trajectory, sectors, sector_bb, objects):
+def plot_trajectory(trajectory, sectors, sector_bb, objects, intrinsic):
     trajectory = np.array(trajectory)
 
     fig = plt.figure()
@@ -145,14 +145,25 @@ def plot_trajectory(trajectory, sectors, sector_bb, objects):
             else:
                 plt.plot(o.position_x, o.position_y, color='red', marker='x', label='Goal')
 
-    trajectory_plot = plt.scatter(trajectory[:, 0], trajectory[:, 1],
-                                  color=[plt.cm.magma(i) for i in np.linspace(0, 1, len(trajectory))],
-                                  label='Exploration', marker='o', linestyle='dashed')
+    if intrinsic:
+        intrinsic_rewards = np.array([x.item() for x in trajectory[:, 2]])
+        intrinsic_rewards = intrinsic_rewards / intrinsic_rewards.max()
+        trajectory_plot = plt.scatter(trajectory[:, 0], trajectory[:, 1],
+                                      color=[plt.cm.magma(intrinsic_rewards[i]) for i in range(len(trajectory))],
+                                      label='Exploration', marker='o', linestyle='dashed')
+        cbar = fig.colorbar(trajectory_plot, ticks=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+        cbar.ax.set_yticklabels([str(i) for i in np.arange(start=0, stop=len(trajectory) + 1, step=20)])
+        cbar.ax.set_ylabel('Curiosity', rotation=270)
+    else:
+        trajectory_plot = plt.scatter(trajectory[:, 0], trajectory[:, 1],
+                                      color=[plt.cm.magma(i) for i in np.linspace(0, 1, len(trajectory))],
+                                      label='Exploration', marker='o', linestyle='dashed')
+        cbar = fig.colorbar(trajectory_plot, ticks=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+        cbar.ax.set_yticklabels([str(i) for i in np.arange(start=0, stop=len(trajectory) + 1, step=20)])
+        cbar.ax.set_ylabel('Action step', rotation=270)
 
     trajectory_plot.set_array(np.linspace(0, 1, len(trajectory)))
-    cbar = fig.colorbar(trajectory_plot, ticks=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
-    cbar.ax.set_yticklabels([str(i) for i in np.arange(start=0, stop=len(trajectory) + 1, step=20)])
-    cbar.ax.set_ylabel('Action step', rotation=270)
+
 
     plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.xlabel('x coordinate')
@@ -244,9 +255,11 @@ class Coverage:
 
         # Compute Occupation Density Entropy
         total_visits = sum(self.visited_sectors_list)
-        occupancy_density_entropy = list(map(lambda x: (x / total_visits) * math.log2(x / total_visits) if x != 0 else 0, self.visited_sectors_list))
+        occupancy_density_entropy = list(
+            map(lambda x: (x / total_visits) * math.log2(x / total_visits) if x != 0 else 0, self.visited_sectors_list))
 
-        return sum(covered_sectors) / self.num_sectors, sum(geometric_weighted_sectors) / self.num_sectors, sum(occupancy_density_entropy) / self.max_entropy
+        return sum(covered_sectors) / self.num_sectors, sum(geometric_weighted_sectors) / self.num_sectors, sum(
+            occupancy_density_entropy) / self.max_entropy
 
 
 def arr_to_sig(arr):

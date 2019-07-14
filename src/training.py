@@ -60,8 +60,6 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
             curr_sector = determine_sector(info['x_pos'], info['y_pos'], sector_bbs)
             visited_sectors['section_{}'.format(curr_sector)] = \
                 visited_sectors.get('section_{}'.format(curr_sector), 0) + 1
-        if 'x_pos' in info and 'y_pos' in info:
-            trajectory = trajectory + [[info['x_pos'], info['y_pos']]]
 
         if agent.intrinsic:
             # if there is intrinsic reward to track, keep old state history to calculate intrinsic reward for this step
@@ -80,6 +78,12 @@ def run_episode(env, agent, deterministic, history_length, skip_frames, max_time
                                                                                          np.array([action]),
                                                                                          history_buffer[
                                                                                              np.newaxis, ...])
+
+        if 'x_pos' in info and 'y_pos' in info:
+            if agent.intrinsic:
+                trajectory = trajectory + [[info['x_pos'], info['y_pos'], r_i.item()]]
+            else:
+                trajectory = trajectory + [[info['x_pos'], info['y_pos'], 0]]
 
         if do_training:
             # when initially added, a transition gets assigned a high priority, such that it gets replayed at least once
@@ -199,7 +203,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         if len(trajectory) > 0:
             if type(env) == DoomEnv:
                 objects = env.state.objects
-                writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, objects),
+                writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, objects,
+                                                                       intrinsic=agent.intrinsic),
                                   global_step=episode_idx)
                 writer.add_scalar('num_visited_sectors', len(visited_sectors), global_step=episode_idx)
 
