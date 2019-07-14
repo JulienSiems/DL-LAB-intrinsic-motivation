@@ -41,7 +41,7 @@ maps = {
 @click.option('-su', '--soft_update', default=False, type=click.BOOL)
 @click.option('-hl', '--history_length', default=4, type=click.INT)
 @click.option('-sf', '--skip_frames', default=3, type=click.INT)
-@click.option('-ddqn', '--ddqn', default=False, type=click.BOOL)
+@click.option('-ddqn', '--ddqn', default=True, type=click.BOOL)
 @click.option('-mo', '--model', default='DeepQNetwork', type=click.Choice(['Resnet', 'Lenet', 'DeepQNetwork']))
 @click.option('-env', '--environment', default=envs[0], type=click.Choice(envs))
 @click.option('-mp', '--map', default=maps[envs[0]][0], type=click.Choice(maps[envs[0]]))
