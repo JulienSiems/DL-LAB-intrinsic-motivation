@@ -151,6 +151,7 @@ def plot_trajectory(trajectory, sectors, sector_bb, objects, intrinsic):
         trajectory_plot = plt.scatter(trajectory[:, 0], trajectory[:, 1],
                                       color=[plt.cm.magma(intrinsic_rewards[i]) for i in range(len(trajectory))],
                                       label='Exploration', marker='o', linestyle='dashed')
+        trajectory_plot.set_array(np.linspace(0, 1, len(trajectory)))
         cbar = fig.colorbar(trajectory_plot, ticks=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
         cbar.ax.set_yticklabels([str(i) for i in np.arange(start=0, stop=len(trajectory) + 1, step=20)])
         cbar.ax.set_ylabel('Curiosity', rotation=270)
@@ -158,11 +159,11 @@ def plot_trajectory(trajectory, sectors, sector_bb, objects, intrinsic):
         trajectory_plot = plt.scatter(trajectory[:, 0], trajectory[:, 1],
                                       color=[plt.cm.magma(i) for i in np.linspace(0, 1, len(trajectory))],
                                       label='Exploration', marker='o', linestyle='dashed')
+        trajectory_plot.set_array(np.linspace(0, 1, len(trajectory)))
         cbar = fig.colorbar(trajectory_plot, ticks=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
         cbar.ax.set_yticklabels([str(i) for i in np.arange(start=0, stop=len(trajectory) + 1, step=20)])
         cbar.ax.set_ylabel('Action step', rotation=270)
 
-    trajectory_plot.set_array(np.linspace(0, 1, len(trajectory)))
 
 
     plt.grid(True, which="both", ls="-", alpha=0.5)
