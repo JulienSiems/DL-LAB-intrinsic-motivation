@@ -235,13 +235,13 @@ class PrioritizedReplayBuffer:
         # assert history_length >= 1
         # assert n_steps >= 1
         if balance_batch:
-            ls = np.linspace(0.0, 0.999, batch_size + 1)
+            ls = np.linspace(0.0, 0.98, batch_size + 1)
             sample_idxs_and_priorities = [self._sample_idx(ls[bidx], ls[bidx+1]) for bidx in range(batch_size)]
         else:
-            sample_idxs_and_priorities = [self._sample_idx(0.0, 0.999) for _ in range(batch_size)]
+            sample_idxs_and_priorities = [self._sample_idx(0.0, 0.98) for _ in range(batch_size)]
         sample_idxs = np.array([tmp[0] for tmp in sample_idxs_and_priorities])
         priorities = np.array([tmp[1] for tmp in sample_idxs_and_priorities], dtype=np.float32)
-        weights = np.power((priorities / self.sum_tree[1]) * self.size, -beta)
+        weights = np.power(((priorities + self.priority_eps) / self.sum_tree[1]) * self.size, -beta)
         weights = weights / (np.max(weights) + 1e-8)  # normalize weights to be max 1.0
         weights = np.array(weights, dtype=np.float32)
         batch_state_sequences_shape = [batch_size, n_steps + 1, self.state_shape[1] * history_length]

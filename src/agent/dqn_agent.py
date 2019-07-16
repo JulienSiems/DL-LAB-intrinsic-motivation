@@ -234,11 +234,11 @@ class DQNAgent:
                 # calculate huber loss of delta
                 # case 0: delta < kappa; case 1: delta >= kappa
                 abs_delta = torch.abs(delta)
-                abs_smaller_kappa_mask = (abs_delta < self.huber_kappa).float()
+                abs_smaller_kappa_mask = (abs_delta <= self.huber_kappa).float()
                 huber_case0 = 0.5 * delta.pow(2) * abs_smaller_kappa_mask
                 huber_case1 = (self.huber_kappa * (abs_delta - 0.5 * self.huber_kappa) *
                                torch.abs(1.0 - abs_smaller_kappa_mask))
-                huber_loss = huber_case0 + huber_case1
+                huber_loss = side_weight * ((huber_case0 + huber_case1) / self.huber_kappa)
                 td_losses = huber_loss.view(-1, self.iqn_np).mean(dim=1).view(self.batch_size, self.iqn_n).sum(dim=1)
             else:
                 # Huber loss
