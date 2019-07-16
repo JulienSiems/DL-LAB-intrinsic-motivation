@@ -156,7 +156,7 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
 
         # EVALUATION
         # check its performance with greedy actions only
-        if eval_cycle >= 1 and (episode_idx % eval_cycle == 0 or is_last_episode):
+        if eval_cycle >= 1 and num_eval_episodes >= 1 and (episode_idx % eval_cycle == 0 or is_last_episode):
             stats = []
             for j in range(num_eval_episodes):
                 stats.append(run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=max_timesteps,
@@ -172,15 +172,15 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
 
         # store model.
         if store_cycle >= 1 and (episode_idx % store_cycle == 0 or is_last_episode):
-            model_files = glob.glob(os.path.join(writer.logdir, "agent*"))
-            # Sort by date
-            model_files.sort(key=os.path.getmtime)
-
-            if len(model_files) > num_model_files - 1:
-                # Delete the oldest model file
-                os.remove(model_files[0])
-            model_dir = agent.save(os.path.join(writer.logdir, "agent_{}.pt".format(episode_idx)))
-            print("Model saved in file: %s" % model_dir)
+            if num_model_files >= 1:
+                model_files = glob.glob(os.path.join(writer.logdir, "agent*"))
+                # Sort by date
+                model_files.sort(key=os.path.getmtime)
+                if len(model_files) > num_model_files - 1:
+                    # Delete the oldest model file
+                    os.remove(model_files[0])
+            agent.save(os.path.join(writer.logdir, "agent_{}.pt".format(episode_idx)))
+            print('model saved!')
 
         if is_last_episode:
             break
@@ -262,8 +262,8 @@ def train_online(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                 writer.add_scalar('wasserstein_distance (cumulative trajectory vs uniform disttribution)', dist,
                                   global_step=episode_idx)
             else:
-                writer.add_figure('trajectory', figure=plot_trajectory(trajectory, sectors, sector_bbs, None),
-                                  global_step=episode_idx)
+                tmp_figure = plot_trajectory(trajectory, sectors, sector_bbs, None, intrinsic=agent.intrinsic)
+                writer.add_figure('trajectory', figure=tmp_figure, global_step=episode_idx)
 
             # Append current trajectory to save of all trajectories
             with open(os.path.join(writer.logdir, "trajectories.obj"), 'ab+') as fp:
