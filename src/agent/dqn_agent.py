@@ -2,6 +2,7 @@ import random
 
 import numpy as np
 import torch
+import torch.nn as nn
 
 from src.agent.replay_buffer import UniformReplayBuffer, PrioritizedReplayBuffer
 
@@ -20,7 +21,8 @@ class DQNAgent:
                  experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay, init_prio,
                  state_dim, iqn, iqn_n, iqn_np, iqn_k, iqn_det_max_train, iqn_det_max_act, huber_kappa, epsilon, tau,
                  n_step_reward, train_every_n_steps, train_n_times, non_uniform_sampling, gamma, batch_size,
-                 soft_update, ddqn, epsilon_schedule, pre_intrinsic, nu_action_probs, adam_epsilon, *args, **kwargs):
+                 soft_update, ddqn, epsilon_schedule, pre_intrinsic, nu_action_probs, adam_epsilon,
+                 gradient_clip, *args, **kwargs):
         """
          Q-Learning agent for off-policy TD control using Function Approximation.
          Finds the optimal greedy policy while following an epsilon-greedy policy.
@@ -52,6 +54,7 @@ class DQNAgent:
         for net in nets:
             parameters |= set(net.parameters())
         self.optimizer = torch.optim.Adam(parameters, lr=lr, eps=adam_epsilon)
+        self.gradient_clip = gradient_clip
 
         # define replay buffer
         tmp_state_shape = tuple([1, state_dim[0], state_dim[1], state_dim[2]])
@@ -227,7 +230,7 @@ class DQNAgent:
                 # difference between predicted quantile values and target samples.
                 delta = td_target_repeated - Q_pred_picked_repeated
                 # if delta is negative, target is on the left of predicted quantile value.
-                ind_left = (delta < 0.0).float()
+                ind_left = (delta < 0.0).float().detach()
                 # weigh samples left of prediction with 1.0 - tau and the right with tau.
                 # if samples are distributed correctly, sides will cancel out to zero.
                 side_weight = torch.abs(taus_repeated - ind_left)
@@ -252,6 +255,8 @@ class DQNAgent:
                 losses = td_losses
             weighted_losses = losses * weights
             weighted_losses.mean().backward()
+            if self.gradient_clip > 0.0:
+                torch.nn.utils.clip_grad_norm_(self.Q.parameters(), max_norm=self.gradient_clip, norm_type=2.0)
             self.optimizer.step()
 
             # update priorities of transitions in replay buffer

@@ -74,6 +74,7 @@ maps = {
 @click.option('-ip', '--init_prio', default=500.0, type=click.FLOAT)
 @click.option('-fe', '--fixed_encoder', default=False, type=click.BOOL)
 @click.option('-du', '--duelling', default=False, type=click.BOOL)
+@click.option('-gcl', '--gradient_clip', default=0.0, type=click.FLOAT, help='clip gradient norm to n (0 to disable)')
 @click.option('-iqn', '--iqn', default=False, type=click.BOOL)
 @click.option('-iqn_n', '--iqn_n', default=32, type=click.INT)
 @click.option('-iqn_np', '--iqn_np', default=32, type=click.INT)
@@ -96,7 +97,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
          pre_intrinsic, experience_replay, prio_er_alpha, prio_er_beta_start, prio_er_beta_end, prio_er_beta_decay,
          init_prio, fixed_encoder, duelling, iqn, iqn_n, iqn_np, iqn_k, iqn_tau_embed_dim, iqn_det_max_train,
          iqn_det_max_act, huber_kappa, state_height, state_width, number_model_files, simple_coverage_threshold,
-         geometric_coverage_gamma, num_total_steps, store_cycle, adam_epsilon):
+         geometric_coverage_gamma, num_total_steps, store_cycle, adam_epsilon, gradient_clip):
     # Set seed
     torch.manual_seed(seed)
     # Create experiment directory with run configuration
@@ -197,7 +198,7 @@ def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train
                      prio_er_beta_start=prio_er_beta_start, prio_er_beta_end=prio_er_beta_end, init_prio=init_prio,
                      prio_er_beta_decay=prio_er_beta_decay, state_dim=state_dim, iqn=iqn, iqn_n=iqn_n, iqn_np=iqn_np,
                      iqn_k=iqn_k, iqn_det_max_train=iqn_det_max_train, iqn_det_max_act=iqn_det_max_act,
-                     nu_action_probs=nu_action_probs, adam_epsilon=adam_epsilon)
+                     nu_action_probs=nu_action_probs, adam_epsilon=adam_epsilon, gradient_clip=gradient_clip)
 
     train_online(env=env, agent=agent, writer=writer, num_episodes=num_episodes, eval_cycle=eval_cycle,
                  num_eval_episodes=num_eval_episodes, soft_update=soft_update, skip_frames=skip_frames,
