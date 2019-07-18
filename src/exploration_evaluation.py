@@ -25,10 +25,10 @@ maps = {
 
 #
 @click.command()
-@click.option('-ne', '--num_eval_episodes', default=50, type=click.INT)
+@click.option('-ne', '--num_evals', default=50, type=click.INT)
 @click.option('-d', '--dir', default='./vizdoom', type=click.STRING)
-@click.option('-a', '--alpha', default=0.9, type=click.FLOAT)
-def main(num_eval_episodes, dir, alpha):
+@click.option('-a', '--alpha', default=0.1, type=click.FLOAT)
+def main(num_evals, dir, alpha):
     def sort_models(fname):
         split_array = re.split('[_ .]', fname)
         return int(split_array[1])
@@ -63,7 +63,7 @@ def main(num_eval_episodes, dir, alpha):
 
         num_episodes = hyperparam['num_episodes']
         eval_cycle = hyperparam['eval_cycle']
-        # num_eval_episodes = hyperparam['num_eval_episodes']
+        num_eval_episodes = hyperparam['num_eval_episodes']
         train_every_n_steps = hyperparam['train_every_n_steps']
         train_n_times = hyperparam['train_n_times']
         batch_size = hyperparam['batch_size']
@@ -135,8 +135,8 @@ def main(num_eval_episodes, dir, alpha):
         if environment == envs[0]:
             from vizdoom_env.vizdoom_env import DoomEnv
             env = DoomEnv(map_name=map, render=render_training)
-            writer = setup_experiment_folder_writer(inspect.currentframe(), name='Vizdoom', log_dir='vizdoom',
-                                                    args_for_filename=args_for_filename)
+            writer = setup_experiment_folder_writer(inspect.currentframe(), name='Vizdoom', log_dir='vizdoom_eval',
+                                                    args_for_filename=args_for_filename, additional_param=hyperparam)
             # placeholder for non uniform action probabilities. change to something sensible if wanted.
             nu_action_probs = np.ones(env.action_space.n, dtype=np.float32) / env.action_space.n
         else:
@@ -235,7 +235,7 @@ def main(num_eval_episodes, dir, alpha):
                      normalize_images=normalize_images, state_dim=state_dim, init_prio=init_prio,
                      num_model_files=number_model_files, simple_coverage_threshold=simple_coverage_threshold,
                      geometric_coverage_gamma=geometric_coverage_gamma, num_total_steps=num_total_steps,
-                     store_cycle=store_cycle, model_name_list=model_name_list[folder_index], alpha=alpha)
+                     store_cycle=store_cycle, model_name_list=model_name_list[folder_index], alpha=alpha, num_evals=num_evals)
         writer.close()
 
 

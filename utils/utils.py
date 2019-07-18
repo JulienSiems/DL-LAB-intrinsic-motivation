@@ -13,6 +13,7 @@ import os
 from tensorboardX import SummaryWriter
 import math
 import itertools
+import cv2
 
 LEFT = 1
 RIGHT = 2
@@ -35,7 +36,7 @@ def rgb2gray(rgb):
     return gray.astype('float32')
 
 
-def setup_experiment_folder_writer(frame, name, log_dir=None, args_for_filename=None):
+def setup_experiment_folder_writer(frame, name, log_dir=None, args_for_filename=None, additional_param=None):
     """
     Create experiment folder and tensorboardx writer
     :param args_for_filename:
@@ -45,6 +46,8 @@ def setup_experiment_folder_writer(frame, name, log_dir=None, args_for_filename=
     :return: tensorboardx writer
     """
     args, _, _, values = inspect.getargvalues(frame)
+    if additional_param is not None:
+        args.extend([k for k in additional_param.keys()])
     if args_for_filename is None:
         args_for_filename = args
     comment = name + ''.join(['_{}_{}_'.format(arg, values[arg]) for arg in args if arg in args_for_filename])
@@ -264,7 +267,7 @@ class Coverage:
             occupancy_density_entropy) / self.max_entropy
 
 class ExplorationMetrics:
-    def __init__(self, num_sectors: int, alpha: float):
+    def __init__(self, num_sectors: int, alpha: float, sector_bbs: dict):
         self.alpha = alpha
         self.num_sectors = num_sectors
         self.visited_sectors_list = [0 for _ in range(num_sectors)]
@@ -274,7 +277,11 @@ class ExplorationMetrics:
         self.total_visits = 0
         self.eval_count = 0
         self.current_eval_visit_prob_list = []
-        # self.sector_bbs = sector_bbs
+        self.sector_bbs = sector_bbs
+        self.map_x_min = int(min([sector['x_min'] for _, sector in sector_bbs.items()]))
+        self.map_x_max = int(max([sector['x_max'] for _, sector in sector_bbs.items()]))
+        self.map_y_min = int(min([sector['y_min'] for _, sector in sector_bbs.items()]))
+        self.map_y_max = int(max([sector['y_max'] for _, sector in sector_bbs.items()]))
 
     def add_evaluation(self, visited_sectors: dict):
         self.current_eval_visited_sectors_list = [
@@ -300,9 +307,16 @@ class ExplorationMetrics:
         total_variance = sum(list(map(lambda x, y: abs(x - y), p, q))) / 2
         return total_variance
 
-    # def get_wasserstein_distance(self, p, q):
-    #     dist, _, _ = cv2.EMD(p_sig, q_sig, cv2.DIST_L2)
-    #     return dist
+    def get_wasserstein_distance(self, p, q):
+        p_sig = np.empty((self.num_sectors, 3), dtype=np.float32)
+        q_sig = np.empty((self.num_sectors, 3), dtype=np.float32)
+        for i in range(self.num_sectors):
+            cord_x = int(self.sector_bbs['section_{}'.format(i)]['cog'][0] - self.map_x_min)
+            cord_y = int(self.sector_bbs['section_{}'.format(i)]['cog'][1] - self.map_y_min)
+            p_sig[i] = np.array([p[i], cord_x, cord_y])
+            q_sig[i] = np.array([q[i], cord_x, cord_y])
+        dist, _, _ = cv2.EMD(p_sig, q_sig, cv2.DIST_L2)
+        return dist
 
     def compute_metrics(self) -> int:
         """Computes the coverage metrics outlined on slack."""
@@ -345,6 +359,14 @@ class ExplorationMetrics:
             ))
         ) / (self.eval_count - 1)
 
+        # wasserstein variance
+        wasserstein_variance = sum(
+            list(map(
+                lambda x, y: self.get_wasserstein_distance(x, y), self.current_eval_visit_prob_list,
+                itertools.repeat(normalized_current_policy_p, len(self.current_eval_visit_prob_list))
+            ))
+        ) / (self.eval_count - 1)
+
 
         self.cumulative_visited_sectors_list = [
             self.cumulative_visited_sectors_list[i] + self.current_eval_visited_sectors_list[i] for i in
@@ -354,7 +376,7 @@ class ExplorationMetrics:
         self.eval_count = 0
         self.current_eval_visit_prob_list = []
 
-        return policy_score, policy_gain, cross_entropy, total_variance
+        return policy_score, policy_gain, cross_entropy, total_variance, wasserstein_variance
 
 
 def arr_to_sig(arr):

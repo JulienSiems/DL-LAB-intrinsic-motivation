@@ -301,12 +301,12 @@ def state_preprocessing(state, height, width, normalize=True):
 
 def eval_offline(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
                  history_length, rendering, max_timesteps, normalize_images, state_dim, init_prio, num_model_files,
-                 simple_coverage_threshold, geometric_coverage_gamma, num_total_steps, store_cycle, model_name_list, alpha):
+                 simple_coverage_threshold, geometric_coverage_gamma, num_total_steps, store_cycle, model_name_list, alpha, num_evals):
     print("... evaluate agent")
 
     # Initialize the coverage metric
     sector_bbs = create_sector_bounding_box(env.state.sectors)
-    exploration_metrics = ExplorationMetrics(num_sectors=len(sector_bbs), alpha=alpha)
+    exploration_metrics = ExplorationMetrics(num_sectors=len(sector_bbs), alpha=alpha, sector_bbs=sector_bbs)
 
     # practically infinite episodes if num_episodes is not >= 1. also add 1 to num_episodes because agent is not trained
     # for last episode. this way, agent is evaluated num_episodes + 1 times but trained num_episodes times
@@ -327,7 +327,7 @@ def eval_offline(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         # check its performance with greedy actions only
         # if eval_cycle >= 1 and num_eval_episodes >= 1 and (episode_idx % eval_cycle == 0 or is_last_episode):
         stats = []
-        for j in range(num_eval_episodes):
+        for j in range(num_evals):
             stat, losses, info, trajectory, action_values, \
             sectors, visited_sectors, sector_bbs = run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=max_timesteps,
                                      history_length=history_length, skip_frames=skip_frames,
@@ -335,7 +335,7 @@ def eval_offline(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                                      init_prio=init_prio, rendering=rendering, soft_update=False)
             stats.append(stat)
             exploration_metrics.add_evaluation(visited_sectors)
-        policy_score, policy_gain, cross_entropy, total_variance = exploration_metrics.compute_metrics()
+        policy_score, policy_gain, cross_entropy, total_variance, wasserstein_variance = exploration_metrics.compute_metrics()
 
         episode_rewards = [stat.episode_reward for stat in stats]
         episode_reward_mean, episode_reward_std = np.mean(episode_rewards), np.std(episode_rewards)
@@ -348,6 +348,7 @@ def eval_offline(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
         writer.add_scalar('exploration_entropy_gain', policy_gain, global_step=episode_idx)
         writer.add_scalar('exploration_cross_entropy', cross_entropy, global_step=episode_idx)
         writer.add_scalar('exploration_variance_total_variance', total_variance, global_step=episode_idx)
+        writer.add_scalar('exploration_variance_wasserstein_variance', wasserstein_variance, global_step=episode_idx)
         #
         # if is_last_episode:
         #     break
