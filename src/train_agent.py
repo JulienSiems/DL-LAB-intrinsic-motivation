@@ -88,7 +88,7 @@ maps = {
 @click.option('-nmf', '--number_model_files', default=0, type=click.INT, help='max num of saved models (0 for unlimit)')
 @click.option('-sct', '--simple_coverage_threshold', default=10, type=click.INT,
               help='Number of separate actions that are required in each segment to be counted as a visited segment.')
-@click.option('-gcg', '--geometric_coverage_gamma', default=.99, type=click.FLOAT)
+@click.option('-gcg', '--geometric_coverage_gamma', default=.9999, type=click.FLOAT)
 def main(num_episodes, eval_cycle, num_eval_episodes, train_every_n_steps, train_n_times, batch_size, learning_rate,
          capacity, gamma, epsilon, tau, soft_update, history_length, skip_frames, ddqn, model, environment, map,
          activation, render_training, max_timesteps, normalize_images, non_uniform_sampling, n_step_reward,
