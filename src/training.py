@@ -9,6 +9,7 @@ from vizdoom_env.vizdoom_env import DoomEnv
 import cv2
 import glob
 import pickle
+import re
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -296,3 +297,59 @@ def state_preprocessing(state, height, width, normalize=True):
     if normalize:
         image_resized_bw = image_resized_bw / 255.0
     return image_resized_bw
+
+
+def eval_offline(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
+                 history_length, rendering, max_timesteps, normalize_images, state_dim, init_prio, num_model_files,
+                 simple_coverage_threshold, geometric_coverage_gamma, num_total_steps, store_cycle, model_name_list, alpha):
+    print("... evaluate agent")
+
+    # Initialize the coverage metric
+    sector_bbs = create_sector_bounding_box(env.state.sectors)
+    exploration_metrics = ExplorationMetrics(num_sectors=len(sector_bbs), alpha=alpha)
+
+    # practically infinite episodes if num_episodes is not >= 1. also add 1 to num_episodes because agent is not trained
+    # for last episode. this way, agent is evaluated num_episodes + 1 times but trained num_episodes times
+    # (only matters if num_episodes is the determining criterion for number of runs)
+    # num_episodes = num_episodes + 1 if num_episodes >= 1 else sys.maxsize
+
+    # quite similar to num_total_steps
+    num_total_steps = num_total_steps if num_total_steps >= 1 else sys.maxsize
+
+    total_steps = 0
+    for m_name in model_name_list:
+        split_array = re.split('[_ .]', m_name)
+        episode_idx = int(split_array[1])
+
+        # is_last_episode = episode_idx >= (num_episodes - 1) or total_steps >= num_total_steps
+
+        # EVALUATION
+        # check its performance with greedy actions only
+        # if eval_cycle >= 1 and num_eval_episodes >= 1 and (episode_idx % eval_cycle == 0 or is_last_episode):
+        stats = []
+        for j in range(num_eval_episodes):
+            stat, losses, info, trajectory, action_values, \
+            sectors, visited_sectors, sector_bbs = run_episode(env, agent, deterministic=True, do_training=False, max_timesteps=max_timesteps,
+                                     history_length=history_length, skip_frames=skip_frames,
+                                     normalize_images=normalize_images, state_dim=state_dim,
+                                     init_prio=init_prio, rendering=rendering, soft_update=False)
+            stats.append(stat)
+            exploration_metrics.add_evaluation(visited_sectors)
+        policy_score, policy_gain, cross_entropy, total_variance = exploration_metrics.compute_metrics()
+
+        episode_rewards = [stat.episode_reward for stat in stats]
+        episode_reward_mean, episode_reward_std = np.mean(episode_rewards), np.std(episode_rewards)
+        print('Validation {} +- {}'.format(episode_reward_mean, episode_reward_std))
+        print('Replay buffer length', agent.replay_buffer.size)
+        writer.add_scalar('val_episode_reward_mean', episode_reward_mean, global_step=episode_idx)
+        writer.add_scalar('val_episode_reward_std', episode_reward_std, global_step=episode_idx)
+
+        writer.add_scalar('exploration_entropy_score', policy_score, global_step=episode_idx)
+        writer.add_scalar('exploration_entropy_gain', policy_gain, global_step=episode_idx)
+        writer.add_scalar('exploration_cross_entropy', cross_entropy, global_step=episode_idx)
+        writer.add_scalar('exploration_variance_total_variance', total_variance, global_step=episode_idx)
+        #
+        # if is_last_episode:
+        #     break
+        #
+        # total_steps += stats.steps

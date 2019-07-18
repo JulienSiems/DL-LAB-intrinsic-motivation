@@ -12,6 +12,7 @@ import numpy as np
 import os
 from tensorboardX import SummaryWriter
 import math
+import itertools
 
 LEFT = 1
 RIGHT = 2
@@ -261,6 +262,99 @@ class Coverage:
 
         return sum(covered_sectors) / self.num_sectors, sum(geometric_weighted_sectors) / self.num_sectors, sum(
             occupancy_density_entropy) / self.max_entropy
+
+class ExplorationMetrics:
+    def __init__(self, num_sectors: int, alpha: float):
+        self.alpha = alpha
+        self.num_sectors = num_sectors
+        self.visited_sectors_list = [0 for _ in range(num_sectors)]
+        self.max_entropy = (1 / self.num_sectors) * math.log2(1 / self.num_sectors) * self.num_sectors
+        self.current_eval_visited_sectors_list = [0 for _ in range(num_sectors)]
+        self.cumulative_visited_sectors_list = [0 for _ in range(num_sectors)]
+        self.total_visits = 0
+        self.eval_count = 0
+        self.current_eval_visit_prob_list = []
+        # self.sector_bbs = sector_bbs
+
+    def add_evaluation(self, visited_sectors: dict):
+        self.current_eval_visited_sectors_list = [
+            self.current_eval_visited_sectors_list[i] + visited_sectors.get('section_{}'.format(i), 0) for i in
+            range(self.num_sectors)]
+        self.eval_count += 1
+        visit_count = sum([visited_sectors.get('section_{}'.format(i), 0) for i in range(self.num_sectors)])
+        current_eval_visit_prob = [visited_sectors.get('section_{}'.format(i), 0) / visit_count for i in range(self.num_sectors)]
+        self.current_eval_visit_prob_list.append(current_eval_visit_prob)
+
+    def get_entropy(self, prob):
+        return list(map(lambda x: -1 * (x / total_visits) * math.log2(x / total_visits) if x != 0 else 0, prob))
+
+    def get_cross_entropy(self, x, y, max_entropy):
+        if x == 0 and y == 0:
+            return 0
+        elif y == 0:
+            return max_entropy
+        else:
+            return -1 * x * math.log2(y)
+
+    def get_total_variance_distance(self, p, q):
+        total_variance = sum(list(map(lambda x, y: abs(x - y), p, q))) / 2
+        return total_variance
+
+    # def get_wasserstein_distance(self, p, q):
+    #     dist, _, _ = cv2.EMD(p_sig, q_sig, cv2.DIST_L2)
+    #     return dist
+
+    def compute_metrics(self) -> int:
+        """Computes the coverage metrics outlined on slack."""
+        expectation_current_policy_p = list(map(lambda x: x / self.eval_count, self.current_eval_visited_sectors_list))
+
+        eval_visits = sum(self.current_eval_visited_sectors_list) / self.eval_count
+        normalized_current_policy_p = list(map(lambda x: x / eval_visits, expectation_current_policy_p))
+
+        prev_visits = sum(self.cumulative_visited_sectors_list)
+        if prev_visits > 0:
+            normalized_cumulative_previous_policies_p = list(map(lambda x: x / prev_visits, self.cumulative_visited_sectors_list))
+
+            # Entropy score and gain
+            p = list(map(lambda x, y: self.alpha * x + (1 - self.alpha) * y,
+                         normalized_current_policy_p, normalized_cumulative_previous_policies_p))
+
+            policy_score = -1 * sum(list(map(lambda x: x * math.log2(x) if x != 0 else 0, p)))
+            cumulative_policy_score = -1 * sum(list(map(lambda x: x * math.log2(x) if x != 0 else 0, normalized_cumulative_previous_policies_p)))
+            policy_gain = policy_score - cumulative_policy_score
+
+            # Cross Entropy
+            a = list(map(lambda x: -1 * math.log2(x) if x != 0 else 0, normalized_cumulative_previous_policies_p))
+            max_cross_entropy = max(list(map(lambda x: -1 * math.log2(x) if x != 0 else 0, normalized_cumulative_previous_policies_p)))
+
+            cross_entropy = sum(list(map(
+                lambda x, y, m: self.get_cross_entropy(x, y, m), normalized_current_policy_p,
+                normalized_cumulative_previous_policies_p,
+                itertools.repeat(max_cross_entropy, len(normalized_cumulative_previous_policies_p))
+            )))
+        else:
+            policy_score = 0
+            policy_gain = 0
+            cross_entropy = 0
+
+        # Exploration variance
+        total_variance = sum(
+            list(map(
+                lambda x, y: self.get_total_variance_distance(x, y), self.current_eval_visit_prob_list,
+                     itertools.repeat(normalized_current_policy_p, len(self.current_eval_visit_prob_list))
+            ))
+        ) / (self.eval_count - 1)
+
+
+        self.cumulative_visited_sectors_list = [
+            self.cumulative_visited_sectors_list[i] + self.current_eval_visited_sectors_list[i] for i in
+            range(self.num_sectors)]
+
+        self.current_eval_visited_sectors_list = [0 for _ in range(self.num_sectors)]
+        self.eval_count = 0
+        self.current_eval_visit_prob_list = []
+
+        return policy_score, policy_gain, cross_entropy, total_variance
 
 
 def arr_to_sig(arr):
