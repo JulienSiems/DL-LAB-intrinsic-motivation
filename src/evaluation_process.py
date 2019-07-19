@@ -26,8 +26,8 @@ def execute_eval(args):
 @click.option('-rd', '--root_dir', type=click.STRING)
 @click.option('--start', type=click.INT, default=0)
 @click.option('--end', type=click.INT, default=10)
-def evaluate_folder(root_dir, start, end):
-    parallel_processes = 5
+@click.option('--parallel_processes', type=click.INT, default=2)
+def evaluate_folder(root_dir, start, end, parallel_processes):
     command_buffer = []
 
     pool = multiprocessing.Pool(processes=parallel_processes)

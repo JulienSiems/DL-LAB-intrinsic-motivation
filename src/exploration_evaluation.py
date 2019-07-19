@@ -216,7 +216,7 @@ def evaluate_folder(root_dir, file_name_list, folder_index, param_list, alpha, m
 
 
 @click.command()
-@click.option('-ne', '--num_evals', default=50, type=click.INT)
+@click.option('-ne', '--num_evals', default=30, type=click.INT)
 @click.option('-d', '--dir', default='./vizdoom/eval_runs', type=click.STRING)
 @click.option('-wr', '--which_run', type=click.INT, default=None)
 @click.option('-a', '--alpha', default=0.1, type=click.FLOAT)
@@ -241,6 +241,7 @@ def main(num_evals, dir, which_run, alpha):
         elif 'config.json' in filename:
             param_list.append(filename)
     model_name_list.append(sorted(model_list, key=lambda x: sort_models(x)))
+    model_name_list[0] = model_name_list[0][::10]
 
     run_eval_folder = lambda folder_index: evaluate_folder(root_dir=root_dir, file_name_list=file_name_list,
                                                            folder_index=folder_index, param_list=param_list,
