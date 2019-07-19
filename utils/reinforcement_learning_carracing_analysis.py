@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
-from utils.analysis import *
+from analysis import *
 
 sns.set_style('whitegrid')
 
@@ -38,7 +38,7 @@ def get_key_from_scalar_configs(configs, key):
 
 
 def main():
-    log_dir = 'reinforcement_learning/carracing_report_2'
+    log_dir = '/home/siemsj/PycharmProjects/IntrinsicMotivation/src/vizdoom/'
 
     experiment_configs = get_experiment_configs(log_dir=log_dir)
 

@@ -337,6 +337,9 @@ def eval_offline(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
                                      init_prio=init_prio, rendering=rendering, soft_update=False)
             stats.append(stat)
             exploration_metrics.add_evaluation(visited_sectors)
+            # Append current trajectory to save of all trajectories
+            with open(os.path.join(writer.logdir, "trajectories_{}.obj".format(episode_idx)), 'ab+') as fp:
+                pickle.dump(trajectory, fp)
         policy_score, policy_gain, cross_entropy, total_variance, wasserstein_variance = exploration_metrics.compute_metrics()
 
         episode_rewards = [stat.episode_reward for stat in stats]
