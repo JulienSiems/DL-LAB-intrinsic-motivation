@@ -26,7 +26,7 @@ maps = {
 #
 @click.command()
 @click.option('-ne', '--num_evals', default=50, type=click.INT)
-@click.option('-d', '--dir', default='./vizdoom', type=click.STRING)
+@click.option('-d', '--dir', default='./vizdoom/eval_runs', type=click.STRING)
 @click.option('-a', '--alpha', default=0.1, type=click.FLOAT)
 def main(num_evals, dir, alpha):
     def sort_models(fname):
@@ -235,7 +235,8 @@ def main(num_evals, dir, alpha):
                      normalize_images=normalize_images, state_dim=state_dim, init_prio=init_prio,
                      num_model_files=number_model_files, simple_coverage_threshold=simple_coverage_threshold,
                      geometric_coverage_gamma=geometric_coverage_gamma, num_total_steps=num_total_steps,
-                     store_cycle=store_cycle, model_name_list=model_name_list[folder_index], alpha=alpha, num_evals=num_evals)
+                     store_cycle=store_cycle, model_name_list=model_name_list[folder_index], alpha=alpha,
+                     num_evals=num_evals, path_of_run=os.path.join(root_dir, file_name_list[folder_index]))
         writer.close()
 
 

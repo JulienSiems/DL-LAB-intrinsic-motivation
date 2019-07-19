@@ -301,7 +301,7 @@ def state_preprocessing(state, height, width, normalize=True):
 
 def eval_offline(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes, soft_update, skip_frames,
                  history_length, rendering, max_timesteps, normalize_images, state_dim, init_prio, num_model_files,
-                 simple_coverage_threshold, geometric_coverage_gamma, num_total_steps, store_cycle, model_name_list, alpha, num_evals):
+                 simple_coverage_threshold, geometric_coverage_gamma, num_total_steps, store_cycle, model_name_list, alpha, num_evals, path_of_run):
     print("... evaluate agent")
 
     # Initialize the coverage metric
@@ -318,10 +318,12 @@ def eval_offline(env, agent, writer, num_episodes, eval_cycle, num_eval_episodes
 
     total_steps = 0
     for m_name in model_name_list:
+        print('Evaluating model', m_name)
         split_array = re.split('[_ .]', m_name)
         episode_idx = int(split_array[1])
 
-        # is_last_episode = episode_idx >= (num_episodes - 1) or total_steps >= num_total_steps
+        # Load target network from checkpoint
+        agent.load(os.path.join(path_of_run, m_name))
 
         # EVALUATION
         # check its performance with greedy actions only
