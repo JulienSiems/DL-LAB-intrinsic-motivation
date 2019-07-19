@@ -309,5 +309,5 @@ class DQNAgent:
         torch.save(self.Q.state_dict(), file_name)
 
     def load(self, file_name):
-        self.Q.load_state_dict(torch.load(file_name, map_location='cuda' if torch.cuda.is_available() else 'cpu'))
-        self.Q_target.load_state_dict(torch.load(file_name, map_location='cuda' if torch.cuda.is_available() else 'cpu'))
+        self.Q.load_state_dict(torch.load(file_name, map_location='cpu')) # ''cuda' if torch.cuda.is_available() else 'cpu'))
+        self.Q_target.load_state_dict(torch.load(file_name, map_location='cpu')) # ''cuda' if torch.cuda.is_available() else 'cpu'))

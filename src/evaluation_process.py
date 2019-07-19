@@ -1,4 +1,3 @@
-# export DISPLAY=:0
 
 import sys
 
@@ -12,20 +11,21 @@ from src.agent.intrinsic_reward import IntrinsicRewardGenerator
 from src.training import eval_offline
 
 from utils.utils import *
-import click
-import re
 import json
-import pathos
-import subprocess
+import click
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 
 envs = ['VizDoom', 'Mario', 'GridWorld', 'Pong']
 maps = {
     envs[0]: ['my_way_home_org', 'my_way_home_spwnhard', 'my_way_home_spwnhard_nogoal']
 }
 
-
+@click.command()
+@click.option('-rd', '--root_dir', type=click.STRING)
+@click.option('-fnl', '--file_name_list', type=click.STRING)
+@click.option('-fi'', --folder_index', type=click.INT)
+@click.option('')
 def evaluate_folder(root_dir, file_name_list, folder_index, param_list, alpha, model_name_list, num_evals):
     # print(model_name_list)
     print(os.path.join(root_dir, file_name_list[folder_index], param_list[folder_index]))
@@ -215,52 +215,3 @@ def evaluate_folder(root_dir, file_name_list, folder_index, param_list, alpha, m
                  store_cycle=store_cycle, model_name_list=model_name_list[folder_index], alpha=alpha,
                  num_evals=num_evals, path_of_run=os.path.join(root_dir, file_name_list[folder_index]))
     writer.close()
-
-
-@click.command()
-@click.option('-ne', '--num_evals', default=50, type=click.INT)
-@click.option('-d', '--dir', default='./vizdoom/eval_runs', type=click.STRING)
-@click.option('-wr', '--which_run', type=click.INT, default=None)
-@click.option('-a', '--alpha', default=0.1, type=click.FLOAT)
-def main(num_evals, dir, which_run, alpha):
-    def sort_models(fname):
-        split_array = re.split('[_ .]', fname)
-        return int(split_array[1])
-
-    root_dir = dir
-    file_name_list = []
-    model_name_list = []
-    event_file_list = []
-    param_list = []
-    for dirname in os.listdir(root_dir):
-        # print(dirname)
-        subdir_path = os.path.join(root_dir, dirname)
-        file_name_list.append(dirname)
-        model_list = []
-        for filename in os.listdir(subdir_path):
-            # print(filename)
-            if 'agent_' in filename and '.pt' in filename:
-                model_list.append(filename)
-            elif 'events.out.tfevents.' in filename:
-                event_file_list.append(filename)
-            elif 'config.json' in filename:
-                param_list.append(filename)
-        model_name_list.append(sorted(model_list, key=lambda x: sort_models(x)))
-
-    run_eval_folder = lambda folder_index: evaluate_folder(root_dir=root_dir, file_name_list=file_name_list,
-                                                           folder_index=folder_index, param_list=param_list,
-                                                           alpha=alpha, model_name_list=model_name_list,
-                                                           num_evals=num_evals)
-    # pool = pathos.multiprocessing.Pool(4)
-    # pool.map(run_eval_folder, range(len(model_name_list)))
-    # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-    #     executor.map(run_eval_folder, range(len(model_name_list)))
-    if which_run is None:
-        for folder_index in range(len(model_name_list)):
-            run_eval_folder(folder_index)
-    else:
-        run_eval_folder(which_run)
-
-
-if __name__ == "__main__":
-    main()
