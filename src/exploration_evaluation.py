@@ -15,8 +15,6 @@ from utils.utils import *
 import click
 import re
 import json
-import pathos
-import subprocess
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -28,9 +26,9 @@ maps = {
 
 def evaluate_folder(root_dir, file_name_list, folder_index, param_list, alpha, model_name_list, num_evals):
     # print(model_name_list)
-    print(os.path.join(root_dir, file_name_list[folder_index], param_list[folder_index]))
+    # print(os.path.join(root_dir, file_name_list[folder_index], param_list[folder_index]))
 
-    json_file_name = os.path.join(root_dir, file_name_list[folder_index], param_list[folder_index])
+    json_file_name = os.path.join(root_dir, param_list[folder_index])
     json_file = open(json_file_name)
     json_str = json_file.read()
     hyperparam = json.loads(json_str)
@@ -213,7 +211,7 @@ def evaluate_folder(root_dir, file_name_list, folder_index, param_list, alpha, m
                  num_model_files=number_model_files, simple_coverage_threshold=simple_coverage_threshold,
                  geometric_coverage_gamma=geometric_coverage_gamma, num_total_steps=num_total_steps,
                  store_cycle=store_cycle, model_name_list=model_name_list[folder_index], alpha=alpha,
-                 num_evals=num_evals, path_of_run=os.path.join(root_dir, file_name_list[folder_index]))
+                 num_evals=num_evals, path_of_run=root_dir)
     writer.close()
 
 
@@ -232,20 +230,17 @@ def main(num_evals, dir, which_run, alpha):
     model_name_list = []
     event_file_list = []
     param_list = []
-    for dirname in os.listdir(root_dir):
-        # print(dirname)
-        subdir_path = os.path.join(root_dir, dirname)
-        file_name_list.append(dirname)
-        model_list = []
-        for filename in os.listdir(subdir_path):
-            # print(filename)
-            if 'agent_' in filename and '.pt' in filename:
-                model_list.append(filename)
-            elif 'events.out.tfevents.' in filename:
-                event_file_list.append(filename)
-            elif 'config.json' in filename:
-                param_list.append(filename)
-        model_name_list.append(sorted(model_list, key=lambda x: sort_models(x)))
+    file_name_list.append(root_dir)
+    model_list = []
+    for filename in os.listdir(root_dir):
+        # print(filename)
+        if 'agent_' in filename and '.pt' in filename:
+            model_list.append(filename)
+        elif 'events.out.tfevents.' in filename:
+            event_file_list.append(filename)
+        elif 'config.json' in filename:
+            param_list.append(filename)
+    model_name_list.append(sorted(model_list, key=lambda x: sort_models(x)))
 
     run_eval_folder = lambda folder_index: evaluate_folder(root_dir=root_dir, file_name_list=file_name_list,
                                                            folder_index=folder_index, param_list=param_list,
