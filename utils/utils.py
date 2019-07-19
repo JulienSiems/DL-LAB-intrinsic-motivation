@@ -271,7 +271,7 @@ class ExplorationMetrics:
         self.alpha = alpha
         self.num_sectors = num_sectors
         self.visited_sectors_list = [0 for _ in range(num_sectors)]
-        self.max_entropy = (1 / self.num_sectors) * math.log2(1 / self.num_sectors) * self.num_sectors
+        self.max_entropy = (1 / self.num_sectors) * math.log(1 / self.num_sectors) * self.num_sectors
         self.current_eval_visited_sectors_list = [0 for _ in range(num_sectors)]
         self.cumulative_visited_sectors_list = [0 for _ in range(num_sectors)]
         self.total_visits = 0
@@ -293,7 +293,7 @@ class ExplorationMetrics:
         self.current_eval_visit_prob_list.append(current_eval_visit_prob)
 
     def get_entropy(self, prob):
-        return list(map(lambda x: -1 * (x / self.total_visits) * math.log2(x / self.total_visits) if x != 0 else 0, prob))
+        return list(map(lambda x: -1 * (x / self.total_visits) * math.log(x / self.total_visits) if x != 0 else 0, prob))
 
     def get_cross_entropy(self, x, y, max_entropy):
         if x == 0 and y == 0:
@@ -333,13 +333,13 @@ class ExplorationMetrics:
             p = list(map(lambda x, y: self.alpha * x + (1 - self.alpha) * y,
                          normalized_current_policy_p, normalized_cumulative_previous_policies_p))
 
-            policy_score = -1 * sum(list(map(lambda x: x * math.log2(x) if x != 0 else 0, p)))
-            cumulative_policy_score = -1 * sum(list(map(lambda x: x * math.log2(x) if x != 0 else 0, normalized_cumulative_previous_policies_p)))
+            policy_score = -1 * sum(list(map(lambda x: x * math.log(x) if x != 0 else 0, p)))
+            cumulative_policy_score = -1 * sum(list(map(lambda x: x * math.log(x) if x != 0 else 0, normalized_cumulative_previous_policies_p)))
             policy_gain = policy_score - cumulative_policy_score
 
             # Cross Entropy
-            a = list(map(lambda x: -1 * math.log2(x) if x != 0 else 0, normalized_cumulative_previous_policies_p))
-            max_cross_entropy = max(list(map(lambda x: -1 * math.log2(x) if x != 0 else 0, normalized_cumulative_previous_policies_p)))
+            a = list(map(lambda x: -1 * math.log(x) if x != 0 else 0, normalized_cumulative_previous_policies_p))
+            max_cross_entropy = max(list(map(lambda x: -1 * math.log(x) if x != 0 else 0, normalized_cumulative_previous_policies_p)))
 
             cross_entropy = sum(list(map(
                 lambda x, y, m: self.get_cross_entropy(x, y, m), normalized_current_policy_p,
