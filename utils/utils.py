@@ -293,7 +293,7 @@ class ExplorationMetrics:
         self.current_eval_visit_prob_list.append(current_eval_visit_prob)
 
     def get_entropy(self, prob):
-        return list(map(lambda x: -1 * (x / total_visits) * math.log2(x / total_visits) if x != 0 else 0, prob))
+        return list(map(lambda x: -1 * (x / self.total_visits) * math.log2(x / self.total_visits) if x != 0 else 0, prob))
 
     def get_cross_entropy(self, x, y, max_entropy):
         if x == 0 and y == 0:
@@ -301,7 +301,7 @@ class ExplorationMetrics:
         elif y == 0:
             return max_entropy
         else:
-            return -1 * x * math.log2(y)
+            return -1 * x * math.log(y)
 
     def get_total_variance_distance(self, p, q):
         total_variance = sum(list(map(lambda x, y: abs(x - y), p, q))) / 2
