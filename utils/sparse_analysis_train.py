@@ -14,10 +14,11 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
     plt.figure()
 
     for config, values in losses_dict.items():
-        mean, std = np.mean(values, axis=0), np.std(values, axis=0)
         if smoothing:
-            mean = savgol_filter(mean, 81, 3)
-            std = savgol_filter(std, 81, 3)
+            values = [savgol_filter(value, 81, 3) for value in values]
+
+        mean, std = np.mean(values, axis=0), np.std(values, axis=0) / np.sqrt(len(values))
+
         if max_iter:
             mean, std = mean[:max_iter], std[:max_iter]
             plt.plot(np.arange(0, max_iter, 1), mean, label=config)
@@ -57,6 +58,14 @@ def main():
             'Current trajectory vs. Uniform distribution', 'Training episode', None, 1750, True),
         'geometric_coverage': (
             'Geometric Coverage (gamma=0.9999)', 'Training episode', None, 1750, False),
+        'simple_coverage': (
+            'Simple Coverage', 'Training episode', None, 1750, False),
+        'num_visited_sectors': (
+            'Number visited sectors per episode', 'Training episode', None, 1750, True),
+        'train_td_loss': (
+            'TD-loss during training', 'Training episode', None, 1750, True),
+        'intrinsic_episode_reward': (
+            'Intrinsic reward per episode', 'Training episode', None, 1750, True),
         'occupancy_density_entropy': (
             'Occupancy Density Entropy', 'Training episode', None, 1750, False),
         'wasserstein_distance__cumulative_trajectory_vs_uniform_disttribution_': (
@@ -85,17 +94,34 @@ def main():
         intrinsic_duelling_true_metric = get_key_from_scalar_configs(intrinsic_duelling_true, metric_key)
         intrinsic_duelling_false_metric = get_key_from_scalar_configs(intrinsic_duelling_false, metric_key)
         extrinsic_duelling_true_metric = get_key_from_scalar_configs(extrinsic_duelling_true, metric_key)
-        # extrinsic_duelling_false_metric = get_key_from_scalar_configs(extrinsic_duelling_false, metric_key)
+        extrinsic_duelling_false_metric = get_key_from_scalar_configs(extrinsic_duelling_false, metric_key)
 
         plot_loss_curves(losses_dict={'Int. (duel.)': intrinsic_duelling_true_metric,
                                       'Int. (no duel.)': intrinsic_duelling_false_metric,
-                                      'Ext. (duel.)': extrinsic_duelling_true_metric,
+                                      # 'Ext. (duel.)': extrinsic_duelling_true_metric,
                                       # 'Ext. (no duel.)': extrinsic_duelling_false_metric
                                       },
                          ylabel=metric_name,
                          xlabel=xlabel,
                          title=None, section='reinforcement_learning', foldername='vizdoom_vis',
-                         filename='ext_int_duelling', eval_cycle=eval_cycle, max_iter=max_iter, smoothing=smoothing)
+                         filename='int_duel_vs_non_duel', eval_cycle=eval_cycle, max_iter=max_iter, smoothing=smoothing)
+
+    for metric_key, (metric_name, xlabel, eval_cycle, max_iter, smoothing) in metric_dict.items():
+        # Loss curve plots for resampling
+        intrinsic_duelling_true_metric = get_key_from_scalar_configs(intrinsic_duelling_true, metric_key)
+        intrinsic_duelling_false_metric = get_key_from_scalar_configs(intrinsic_duelling_false, metric_key)
+        extrinsic_duelling_true_metric = get_key_from_scalar_configs(extrinsic_duelling_true, metric_key)
+        extrinsic_duelling_false_metric = get_key_from_scalar_configs(extrinsic_duelling_false, metric_key)
+
+        plot_loss_curves(losses_dict={  # 'Int. (duel.)': intrinsic_duelling_true_metric,
+            'Int. (no duel.)': intrinsic_duelling_false_metric,
+            # 'Ext. (duel.)': extrinsic_duelling_true_metric,
+            'Ext. (no duel.)': extrinsic_duelling_false_metric
+        },
+            ylabel=metric_name,
+            xlabel=xlabel,
+            title=None, section='reinforcement_learning', foldername='vizdoom_vis',
+            filename='ext_vs_int', eval_cycle=eval_cycle, max_iter=max_iter, smoothing=smoothing)
 
 
 if __name__ == "__main__":
