@@ -9,7 +9,7 @@ from scipy.signal import savgol_filter
 sns.set_style('whitegrid')
 
 SMALL_SIZE = 8
-MEDIUM_SIZE = 10
+MEDIUM_SIZE = 12
 BIGGER_SIZE = 17
 
 plt.rc('font', size=SMALL_SIZE)  # controls default text sizes
@@ -17,7 +17,7 @@ plt.rc('axes', titlesize=SMALL_SIZE)  # fontsize of the axes title
 plt.rc('axes', labelsize=BIGGER_SIZE)  # fontsize of the x and y labels
 plt.rc('xtick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
 plt.rc('ytick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
-plt.rc('legend', fontsize=SMALL_SIZE)  # legend fontsize
+plt.rc('legend', fontsize=MEDIUM_SIZE)  # legend fontsize
 plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 
@@ -39,6 +39,7 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
             plt.plot(np.arange(len(mean)), mean, label=config)
             plt.fill_between(np.arange(len(mean)), mean - std, mean + std, alpha=0.3)
 
+    plt.xlim(left=30)
     plt.title(title)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -47,7 +48,8 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
     plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.tight_layout()
     plt.savefig(
-        os.path.join('imgs', section, foldername, '{}_{}_{}_{}.png'.format(filename, xlabel, ylabel, foldername)))
+        os.path.join('imgs', section, foldername, '{}_{}_{}_{}.png'.format(filename, xlabel, ylabel, foldername)),
+        dpi=1200)
     plt.close()
     pass
 
@@ -157,12 +159,33 @@ def main():
         intrinsic_duelling_false_higher_mu_metric = get_key_from_scalar_configs(intrinsic_duelling_false_higher_mu,
                                                                                 metric_key)
         plot_loss_curves(losses_dict={  # 'Int. (duel.)': intrinsic_duelling_true_metric,
-            'Intrinsic (h)': intrinsic_duelling_false_higher_mu_metric,
-            'Intrinsic': intrinsic_duelling_false_metric,
+            'Intrinsic': intrinsic_duelling_false_higher_mu_metric,
+            # 'Intrinsic': intrinsic_duelling_false_metric,
             # 'Ext. (duel.)': extrinsic_duelling_true_metric,
             'Extrinsic': extrinsic_duelling_false_metric,
-            # 'Random Trajectory': random_search_metric
+            'Random Trajectory': random_search_metric
         },
+            ylabel=metric_name,
+            xlabel=xlabel,
+            title=None, section='reinforcement_learning', foldername='vizdoom_vis',
+            filename='ext_vs_int_with_random', eval_cycle=eval_cycle, max_iter=max_iter, smoothing=smoothing)
+
+    for metric_key, (metric_name, xlabel, eval_cycle, max_iter, smoothing) in metric_dict.items():
+        # Loss curve plots for resampling
+        intrinsic_duelling_true_metric = get_key_from_scalar_configs(intrinsic_duelling_true, metric_key)
+        intrinsic_duelling_false_metric = get_key_from_scalar_configs(intrinsic_duelling_false, metric_key)
+        extrinsic_duelling_true_metric = get_key_from_scalar_configs(extrinsic_duelling_true, metric_key)
+        extrinsic_duelling_false_metric = get_key_from_scalar_configs(extrinsic_duelling_false, metric_key)
+        random_search_metric = get_key_from_scalar_configs(random_search, metric_key)
+        intrinsic_duelling_false_higher_mu_metric = get_key_from_scalar_configs(intrinsic_duelling_false_higher_mu,
+                                                                                metric_key)
+        plot_loss_curves(losses_dict={  # 'Int. (duel.)': intrinsic_duelling_true_metric,
+            'Intrinsic': intrinsic_duelling_false_higher_mu_metric,
+            # 'Intrinsic': intrinsic_duelling_false_metric,
+            # 'Ext. (duel.)': extrinsic_duelling_true_metric,
+            'Extrinsic': extrinsic_duelling_false_metric,
+            # 'Random Trajectory': random_search_metric},
+            },
             ylabel=metric_name,
             xlabel=xlabel,
             title=None, section='reinforcement_learning', foldername='vizdoom_vis',

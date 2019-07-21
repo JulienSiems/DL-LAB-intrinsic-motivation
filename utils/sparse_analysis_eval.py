@@ -8,7 +8,7 @@ from scipy.signal import savgol_filter
 
 sns.set_style('whitegrid')
 SMALL_SIZE = 8
-MEDIUM_SIZE = 10
+MEDIUM_SIZE = 12
 BIGGER_SIZE = 17
 
 plt.rc('font', size=SMALL_SIZE)  # controls default text sizes
@@ -16,14 +16,13 @@ plt.rc('axes', titlesize=SMALL_SIZE)  # fontsize of the axes title
 plt.rc('axes', labelsize=BIGGER_SIZE)  # fontsize of the x and y labels
 plt.rc('xtick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
 plt.rc('ytick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
-plt.rc('legend', fontsize=SMALL_SIZE)  # legend fontsize
+plt.rc('legend', fontsize=MEDIUM_SIZE)  # legend fontsize
 plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 
 def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, smoothing, filename=None, eval_cycle=None,
                      max_iter=None):
     plt.figure()
-
     for config, values in losses_dict.items():
         if smoothing:
             values = [savgol_filter(value, 81, 3) for value in values]
@@ -37,7 +36,10 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
         else:
             plt.plot(np.arange(len(mean)), mean, label=config)
             plt.fill_between(np.arange(len(mean)), mean - std, mean + std, alpha=0.3)
+            plt.xticks(np.arange(0, len(mean), 5), np.arange(0, len(mean) * 100, 500), rotation=0)
 
+    # Ignore first evaluation
+    plt.xlim(left=1)
     plt.title(title)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -46,7 +48,8 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
     plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.tight_layout()
     plt.savefig(
-        os.path.join('imgs', section, foldername, '{}_{}_{}_{}.png'.format(filename, xlabel, ylabel, foldername)))
+        os.path.join('imgs', section, foldername, '{}_{}_{}_{}.png'.format(filename, xlabel, ylabel, foldername)),
+        dpi=1200)
     plt.close()
     pass
 
@@ -78,23 +81,40 @@ def main():
     # Check that geometric_coverage gamma was the same for all runs
     for config in experiment_configs:
         print(config['geometric_coverage_gamma'])
-
     intrinsic_duelling_true = find_matching_runs(experiment_configs, conditions={'intrinsic': True,
                                                                                  'extrinsic': False,
                                                                                  'duelling': True,
-                                                                                 'epsilon': 0.1})
+                                                                                 'epsilon': 0.1,
+                                                                                 'mu_intrinsic': .0005})
+
     intrinsic_duelling_false = find_matching_runs(experiment_configs, conditions={'intrinsic': True,
                                                                                   'extrinsic': False,
                                                                                   'duelling': False,
-                                                                                  'epsilon': 0.1})
+                                                                                  'epsilon': 0.1,
+                                                                                  'mu_intrinsic': .0005})
+
+    intrinsic_duelling_false_higher_mu = find_matching_runs(experiment_configs, conditions={'intrinsic': True,
+                                                                                            'extrinsic': False,
+                                                                                            'duelling': False,
+                                                                                            'epsilon': 0.1,
+                                                                                            'mu_intrinsic': 1.0})
+    intrinsic_duelling_true_higher_mu = find_matching_runs(experiment_configs, conditions={'intrinsic': True,
+                                                                                           'extrinsic': False,
+                                                                                           'duelling': True,
+                                                                                           'epsilon': 0.1,
+                                                                                           'mu_intrinsic': 1.0})
+
     extrinsic_duelling_true = find_matching_runs(experiment_configs, conditions={'intrinsic': False,
                                                                                  'extrinsic': True,
                                                                                  'duelling': True,
-                                                                                 'epsilon': 0.1})
+                                                                                 'epsilon': 0.1,
+                                                                                 'mu_intrinsic': .0005})
+
     extrinsic_duelling_false = find_matching_runs(experiment_configs, conditions={'intrinsic': False,
                                                                                   'extrinsic': True,
                                                                                   'duelling': False,
-                                                                                  'epsilon': 0.1})
+                                                                                  'epsilon': 0.1,
+                                                                                  'mu_intrinsic': .0005})
     random_search = find_matching_runs(experiment_configs, conditions={'epsilon': 1.0})
 
     for metric_key, (metric_name, xlabel, eval_cycle, max_iter, smoothing) in metric_dict.items():
@@ -103,12 +123,19 @@ def main():
         intrinsic_duelling_false_metric = get_key_from_scalar_configs(intrinsic_duelling_false, metric_key)
         extrinsic_duelling_true_metric = get_key_from_scalar_configs(extrinsic_duelling_true, metric_key)
         extrinsic_duelling_false_metric = get_key_from_scalar_configs(extrinsic_duelling_false, metric_key)
+        intrinsic_duelling_false_higher_mu_metric = get_key_from_scalar_configs(intrinsic_duelling_false_higher_mu,
+                                                                                metric_key)
+        intrinsic_duelling_true_higher_mu_metric = get_key_from_scalar_configs(intrinsic_duelling_true_higher_mu,
+                                                                               metric_key)
+
         random_search_metric = get_key_from_scalar_configs(random_search, metric_key)
         plot_loss_curves(losses_dict={  # 'Int. (duel.)': intrinsic_duelling_true_metric,
-            'Intrinsic': intrinsic_duelling_false_metric,
+            # 'Intrinsic': intrinsic_duelling_false_metric,
+            'Intrinsic': intrinsic_duelling_false_higher_mu_metric,
+            # 'Intrinsic duel (h)': intrinsic_duelling_true_higher_mu_metric,
             # 'Ext. (duel.)': extrinsic_duelling_true_metric,
             'Extrinsic': extrinsic_duelling_false_metric,
-            'Random Search': random_search_metric
+            # 'Random Search': random_search_metric
         },
             ylabel=metric_name,
             xlabel=xlabel,
@@ -120,17 +147,49 @@ def main():
         intrinsic_duelling_true_metric = get_key_from_scalar_configs(intrinsic_duelling_true, metric_key)
         intrinsic_duelling_false_metric = get_key_from_scalar_configs(intrinsic_duelling_false, metric_key)
         extrinsic_duelling_true_metric = get_key_from_scalar_configs(extrinsic_duelling_true, metric_key)
+        extrinsic_duelling_false_metric = get_key_from_scalar_configs(extrinsic_duelling_false, metric_key)
+        intrinsic_duelling_false_higher_mu_metric = get_key_from_scalar_configs(intrinsic_duelling_false_higher_mu,
+                                                                                metric_key)
+        intrinsic_duelling_true_higher_mu_metric = get_key_from_scalar_configs(intrinsic_duelling_true_higher_mu,
+                                                                               metric_key)
+
+        random_search_metric = get_key_from_scalar_configs(random_search, metric_key)
+        plot_loss_curves(losses_dict={  # 'Int. (duel.)': intrinsic_duelling_true_metric,
+            # 'Intrinsic': intrinsic_duelling_false_metric,
+            'Intrinsic': intrinsic_duelling_false_higher_mu_metric,
+            # 'Intrinsic duel (h)': intrinsic_duelling_true_higher_mu_metric,
+            # 'Ext. (duel.)': extrinsic_duelling_true_metric,
+            'Extrinsic': extrinsic_duelling_false_metric,
+            'Random Trajectory': random_search_metric
+        },
+            ylabel=metric_name,
+            xlabel=xlabel,
+            title=None, section='reinforcement_learning', foldername='vizdoom_vis_eval',
+            filename='ext_int_no_duelling_with_random', eval_cycle=eval_cycle, max_iter=max_iter, smoothing=smoothing)
+
+    for metric_key, (metric_name, xlabel, eval_cycle, max_iter, smoothing) in metric_dict.items():
+        # Loss curve plots for resampling
+        intrinsic_duelling_true_metric = get_key_from_scalar_configs(intrinsic_duelling_true, metric_key)
+        intrinsic_duelling_false_metric = get_key_from_scalar_configs(intrinsic_duelling_false, metric_key)
+        extrinsic_duelling_true_metric = get_key_from_scalar_configs(extrinsic_duelling_true, metric_key)
         # extrinsic_duelling_false_metric = get_key_from_scalar_configs(extrinsic_duelling_false, metric_key)
+        intrinsic_duelling_false_higher_mu_metric = get_key_from_scalar_configs(intrinsic_duelling_false_higher_mu,
+                                                                                metric_key)
+        intrinsic_duelling_true_higher_mu_metric = get_key_from_scalar_configs(intrinsic_duelling_true_higher_mu,
+                                                                               metric_key)
 
         plot_loss_curves(losses_dict={'Int. (duel.)': intrinsic_duelling_true_metric,
                                       'Int. (no duel.)': intrinsic_duelling_false_metric,
+                                      'Int. (h) (duel.)': intrinsic_duelling_true_higher_mu_metric,
+                                      'Int. (h) (no duel.)': intrinsic_duelling_false_higher_mu_metric,
                                       # 'Ext. (duel.)': extrinsic_duelling_true_metric,
                                       # 'Ext. (no duel.)': extrinsic_duelling_false_metric
                                       },
                          ylabel=metric_name,
                          xlabel=xlabel,
                          title=None, section='reinforcement_learning', foldername='vizdoom_vis_eval',
-                         filename='int_vs_int_duelling', eval_cycle=eval_cycle, max_iter=max_iter, smoothing=smoothing)
+                         filename='int_vs_int_duelling', eval_cycle=eval_cycle, max_iter=max_iter,
+                         smoothing=smoothing)
 
 
 if __name__ == "__main__":
