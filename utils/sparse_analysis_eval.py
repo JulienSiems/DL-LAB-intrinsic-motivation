@@ -25,7 +25,7 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
     plt.figure()
     for config, values in losses_dict.items():
         if smoothing:
-            values = [savgol_filter(value, 81, 3) for value in values]
+            values = [savgol_filter(value, 5, 3) for value in values]
 
         mean, std = np.mean(values, axis=0), np.std(values, axis=0) / np.sqrt(len(values))
 
@@ -39,7 +39,7 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
             plt.xticks(np.arange(0, len(mean), 5), np.arange(0, len(mean) * 100, 500), rotation=0)
 
     # Ignore first evaluation
-    plt.xlim(left=1)
+    plt.xlim(left=1, right=len(mean))
     plt.title(title)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -49,7 +49,7 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
     plt.tight_layout()
     plt.savefig(
         os.path.join('imgs', section, foldername, '{}_{}_{}_{}.png'.format(filename, xlabel, ylabel, foldername)),
-        dpi=1200)
+        dpi=700)
     plt.close()
     pass
 
@@ -67,15 +67,15 @@ def main():
 
     metric_dict = {
         'exploration_cross_entropy': (
-            'Exploration Cross Entropy', 'Training episode', None, None, False),
+            'Exploration Cross Entropy', 'Training episode', None, None, True),
         'exploration_entropy_gain': (
-            'Exploration Entropy Gain', 'Training episode', None, None, False),
+            'Exploration Entropy Gain', 'Training episode', None, None, True),
         'exploration_entropy_score': (
-            'Exploration Entropy Score', 'Training episode', None, None, False),
+            'Exploration Entropy Score', 'Training episode', None, None, True),
         'exploration_variance_total_variance': (
-            'Exploration Variance (Total Variance)', 'Training episode', None, None, False),
+            'Exploration Variance (Total Variance)', 'Training episode', None, None, True),
         'exploration_variance_wasserstein_variance': (
-            'Exploration Variance (Wasserstein Distance)', 'Training episode', None, None, False),
+            'Exploration Variance (Wasserstein Distance)', 'Training episode', None, None, True),
     }
 
     # Check that geometric_coverage gamma was the same for all runs
@@ -134,7 +134,7 @@ def main():
             'Intrinsic': intrinsic_duelling_false_higher_mu_metric,
             # 'Intrinsic duel (h)': intrinsic_duelling_true_higher_mu_metric,
             # 'Ext. (duel.)': extrinsic_duelling_true_metric,
-            'Extrinsic': extrinsic_duelling_false_metric,
+            'No Reward': extrinsic_duelling_false_metric,
             # 'Random Search': random_search_metric
         },
             ylabel=metric_name,
@@ -159,7 +159,7 @@ def main():
             'Intrinsic': intrinsic_duelling_false_higher_mu_metric,
             # 'Intrinsic duel (h)': intrinsic_duelling_true_higher_mu_metric,
             # 'Ext. (duel.)': extrinsic_duelling_true_metric,
-            'Extrinsic': extrinsic_duelling_false_metric,
+            'No Reward': extrinsic_duelling_false_metric,
             'Random Trajectory': random_search_metric
         },
             ylabel=metric_name,

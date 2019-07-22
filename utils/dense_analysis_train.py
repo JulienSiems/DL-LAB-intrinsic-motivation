@@ -27,7 +27,7 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
 
     for config, values in losses_dict.items():
         if smoothing:
-            values = [savgol_filter(value, 81, 3) for value in values]
+            values = [savgol_filter(value, 121, 3) for value in values]
 
         mean, std = np.mean(values, axis=0), np.std(values, axis=0) / np.sqrt(len(values))
 
@@ -39,7 +39,7 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
             plt.plot(np.arange(len(mean)), mean, label=config)
             plt.fill_between(np.arange(len(mean)), mean - std, mean + std, alpha=0.3)
 
-    plt.xlim(left=30)
+    plt.xlim(left=30, right=len(mean))
     plt.title(title)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -49,7 +49,7 @@ def plot_loss_curves(losses_dict, title, xlabel, ylabel, section, foldername, sm
     plt.tight_layout()
     plt.savefig(
         os.path.join('imgs', section, foldername, '{}_{}_{}_{}.png'.format(filename, xlabel, ylabel, foldername)),
-        dpi=1200)
+        dpi=700)
     plt.close()
     pass
 
